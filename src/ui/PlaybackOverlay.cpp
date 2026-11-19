@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QIcon>
 #include <QMouseEvent>
+#include <QDateTime>
 #include <algorithm>
 #include <cmath>
 
@@ -83,7 +84,14 @@ void TimelineSlider::mouseMoveEvent(QMouseEvent* event) {
         setValue(static_cast<int>(ratio * 10000));
         double targetSec = ratio * m_duration;
         emit draggingPositionChanged(targetSec);
-        emit seekRequested(targetSec);
+
+        // Throttle seek commands during rapid dragging to at most every 35ms (~30Hz)
+        // to prevent flooding the mpv decoder pipeline
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (now - m_lastSeekDispatchMs >= 35) {
+            m_lastSeekDispatchMs = now;
+            emit seekRequested(targetSec);
+        }
         event->accept();
         return;
     }
@@ -130,6 +138,11 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     setupUi();
 
     m_fadeAnimation->setDuration(150);
+    connect(m_fadeAnimation, &QPropertyAnimation::finished, this, [this]() {
+        if (m_opacityEffect->opacity() <= 0.05) {
+            hide();
+        }
+    });
     hide();
 }
 
@@ -250,10 +263,14 @@ void PlaybackOverlay::setFileName(const QString& name) {
 }
 
 void PlaybackOverlay::setPosition(double seconds) {
-    if (!m_timelineSlider->isDragging()) {
-        m_position = seconds;
+    m_position = seconds;
+    if (!m_timelineSlider->isDragging() && isVisible()) {
         m_timelineSlider->setPosition(seconds);
-        updateTimeLabel();
+        int curSec = static_cast<int>(seconds);
+        if (curSec != m_lastReportedSec) {
+            m_lastReportedSec = curSec;
+            updateTimeLabel();
+        }
     }
 }
 
@@ -318,6 +335,9 @@ void PlaybackOverlay::showOsd(const QString& message) {
 }
 
 void PlaybackOverlay::showOverlay() {
+    m_timelineSlider->setPosition(m_position);
+    m_lastReportedSec = static_cast<int>(m_position);
+    updateTimeLabel();
     show();
     m_fadeAnimation->stop();
     m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
@@ -329,11 +349,6 @@ void PlaybackOverlay::hideOverlay() {
     m_fadeAnimation->stop();
     m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
     m_fadeAnimation->setEndValue(0.0);
-    connect(m_fadeAnimation, &QPropertyAnimation::finished, this, [this]() {
-        if (m_opacityEffect->opacity() <= 0.05) {
-            hide();
-        }
-    });
     m_fadeAnimation->start();
 }
 

@@ -50,6 +50,10 @@ FormatRegistry::FormatRegistry() {
     m_formats.push_back({QStringLiteral(".ogg"),  QStringLiteral("Ogg Vorbis Audio"),        FormatCategory::Audio,       QStringLiteral("audio/ogg"),                 QStringLiteral("org.xiph.ogg-audio"),           QStringLiteral("Kvikplay.ogg")});
     m_formats.push_back({QStringLiteral(".opus"), QStringLiteral("Opus Audio"),              FormatCategory::Audio,       QStringLiteral("audio/opus"),                QStringLiteral("org.xiph.opus"),                QStringLiteral("Kvikplay.opus")});
     m_formats.push_back({QStringLiteral(".wma"),  QStringLiteral("Windows Media Audio"),     FormatCategory::Audio,       QStringLiteral("audio/x-ms-wma"),            QStringLiteral("com.microsoft.windows-media-wma"), QStringLiteral("Kvikplay.wma")});
+
+    for (const auto& fmt : m_formats) {
+        m_supportedExtensions.insert(fmt.extension.toLower());
+    }
 }
 
 QString FormatRegistry::extractExtension(const QString& filePathOrExt) {
@@ -78,7 +82,7 @@ std::vector<FormatInfo> FormatRegistry::formatsByCategory(FormatCategory categor
 }
 
 bool FormatRegistry::isSupported(const QString& filePathOrExt) const {
-    return findFormat(filePathOrExt).has_value();
+    return m_supportedExtensions.contains(extractExtension(filePathOrExt));
 }
 
 bool FormatRegistry::isVideo(const QString& filePathOrExt) const {

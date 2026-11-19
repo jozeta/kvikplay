@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QSet>
 #include <vector>
 #include <optional>
 
@@ -45,6 +46,7 @@ private:
     static QString extractExtension(const QString& filePathOrExt);
 
     std::vector<FormatInfo> m_formats;
+    QSet<QString> m_supportedExtensions;
 };
 
 } // namespace kvikplay

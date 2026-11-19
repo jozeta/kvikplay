@@ -5,6 +5,19 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Default to high-performance Release build with Link-Time Optimization
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
+endif()
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|AppleClang|GNU")
+    add_compile_options(-O3 -flto)
+    add_link_options(-flto)
+elseif(MSVC)
+    add_compile_options(/O2 /GL)
+    add_link_options(/LTCG)
+endif()
+
 set(CMAKE_AUTORCC ON)
 
 # Homebrew paths for macOS discovery

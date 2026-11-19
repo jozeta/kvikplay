@@ -42,6 +42,21 @@ bool MpvController::initialize() {
     mpv_set_option_string(m_mpv, "msg-level", "all=warn");
     mpv_set_option_string(m_mpv, "audio-client-name", "Kvikplay");
     mpv_set_option_string(m_mpv, "ytdl", "no");
+    mpv_set_option_string(m_mpv, "input-default-bindings", "no");
+    mpv_set_option_string(m_mpv, "input-vo-keyboard", "no");
+
+    // Super fast seeking & low latency
+    mpv_set_option_string(m_mpv, "hr-seek", "default");
+    mpv_set_option_string(m_mpv, "hr-seek-framedrop", "yes");
+    mpv_set_option_string(m_mpv, "video-latency-hacks", "yes");
+
+    // Fast in-memory cache for seamless jumping back/forth
+    mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "15");
+    mpv_set_option_string(m_mpv, "demuxer-max-bytes", "134217728"); // 128 MiB
+    mpv_set_option_string(m_mpv, "demuxer-lavf-o", "probesize=1000000,analyzeduration=1000000");
+
+    // Audio pitch correction
+    mpv_set_option_string(m_mpv, "audio-pitch-correction", "yes");
 
     // Hardware decoding: try auto-safe (VideoToolbox on macOS, D3D11VA on Windows)
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
@@ -73,10 +88,13 @@ bool MpvController::initialize() {
 
 void MpvController::onMpvWakeup(void* ctx) {
     auto* self = static_cast<MpvController*>(ctx);
-    QMetaObject::invokeMethod(self, &MpvController::processMpvEvents, Qt::QueuedConnection);
+    if (!self->m_wakeupPending.exchange(true)) {
+        QMetaObject::invokeMethod(self, &MpvController::processMpvEvents, Qt::QueuedConnection);
+    }
 }
 
 void MpvController::processMpvEvents() {
+    m_wakeupPending.store(false);
     if (!m_mpv) return;
 
     while (true) {

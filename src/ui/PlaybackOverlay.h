@@ -38,6 +38,7 @@ private:
     double m_duration{0.0};
     double m_position{0.0};
     bool m_dragging{false};
+    qint64 m_lastSeekDispatchMs{0};
 };
 
 class PlaybackOverlay : public QWidget {
@@ -107,6 +108,7 @@ private:
 
     double m_position{0.0};
     double m_duration{0.0};
+    int m_lastReportedSec{-1};
     bool m_isPlaying{false};
     bool m_showRemainingTime{false};
 };

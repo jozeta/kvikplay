@@ -42,10 +42,13 @@ void* VideoRenderer::getProcAddress(void* ctx, const char* name) {
 
 void VideoRenderer::onRenderUpdateStatic(void* ctx) {
     auto* self = static_cast<VideoRenderer*>(ctx);
-    QMetaObject::invokeMethod(self, "requestRenderUpdate", Qt::QueuedConnection);
+    if (!self->m_renderUpdatePending.exchange(true)) {
+        QMetaObject::invokeMethod(self, &VideoRenderer::requestRenderUpdate, Qt::QueuedConnection);
+    }
 }
 
 void VideoRenderer::requestRenderUpdate() {
+    m_renderUpdatePending.store(false);
     if (!m_mpv_gl) return;
     uint64_t flags = mpv_render_context_update(m_mpv_gl);
     if (flags & MPV_RENDER_UPDATE_FRAME) {
@@ -98,9 +101,11 @@ void VideoRenderer::paintGL() {
         };
 
         int flip_y = 1; // Qt FBO coordinate orientation
+        int block_for_target_time = 0; // Never block Qt GUI render thread
         mpv_render_param params[]{
             {MPV_RENDER_PARAM_OPENGL_FBO, &fbo},
             {MPV_RENDER_PARAM_FLIP_Y, &flip_y},
+            {MPV_RENDER_PARAM_BLOCK_FOR_TARGET_TIME, &block_for_target_time},
             {MPV_RENDER_PARAM_INVALID, nullptr}
         };
 

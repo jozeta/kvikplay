@@ -2,6 +2,7 @@
 
 #include <QOpenGLWidget>
 #include <QOpenGLContext>
+#include <atomic>
 #include <mpv/client.h>
 #include <mpv/render_gl.h>
 #include "player/MediaInfo.h"
@@ -37,6 +38,7 @@ private:
     bool m_hasVideo{false};
     MediaInfo m_mediaInfo;
     bool m_initialized{false};
+    std::atomic<bool> m_renderUpdatePending{false};
 };
 
 } // namespace kvikplay

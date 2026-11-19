@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <vector>
+#include <atomic>
 #include <mpv/client.h>
 #include "PlaybackState.h"
 #include "MediaInfo.h"
@@ -84,6 +85,7 @@ private:
     bool m_isMuted{false};
     double m_speed{1.0};
     bool m_isPaused{false};
+    std::atomic<bool> m_wakeupPending{false};
 };
 
 } // namespace kvikplay
