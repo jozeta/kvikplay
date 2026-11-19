@@ -92,8 +92,13 @@ During normal playback, there is practically no interface chrome—no traditiona
 
 | Shortcut | Action |
 |---|---|
+| `Cmd + O` / `Ctrl + O` | Open File via native file picker |
 | `Space` | Play / Pause |
-| `C` (Hold) | 2.0x Quick Speed Boost (release to restore 1.0x) |
+| `C` (Hold) | 2.0x Quick Speed Boost (release restores previous speed) |
+| `-` / `=` (or `+`) | Adjust playback speed &plusmn;0.1x (0.25x - 4.0x) |
+| `Backspace` | Reset playback speed to 1.0x |
+| `.` (Period) | Step forward 1 frame |
+| `,` (Comma) | Step backward 1 frame |
 | `1` | Original size (100% video resolution) |
 | `2` | Half size (50% video resolution) |
 | `4` | Quarter size (25% video resolution) |
@@ -135,7 +140,7 @@ During normal playback, there is practically no interface chrome—no traditiona
 | `Shift + Scroll Up / Down` | Seek forward / backward 30s |
 | `Ctrl + Scroll Up / Down` | Increase / decrease volume by 5% |
 | `Hover Window` | Reveal overlay controls (auto-hides after 5s stillness) |
-| `Drag and Drop File` | Open video or audio file and start playback immediately |
+| `Drag and Drop File or Folder` | Open video, audio, or entire media directory and start playback immediately |
 
 ---
 

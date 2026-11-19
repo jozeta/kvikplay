@@ -46,6 +46,7 @@ private:
 
     double m_requestedTime{-1.0};
     bool m_hasRequest{false};
+    double m_aspectRatio{16.0 / 9.0};
 
     QCache<int, QImage> m_cache;
 };

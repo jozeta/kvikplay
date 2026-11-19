@@ -25,17 +25,17 @@ OsdNotification::OsdNotification(QWidget* parent)
     m_label->setAlignment(Qt::AlignCenter);
 
     m_fadeAnimation->setDuration(150);
+    connect(m_fadeAnimation, &QPropertyAnimation::finished, this, [this]() {
+        if (m_opacityEffect->opacity() <= 0.01) {
+            hide();
+        }
+    });
 
     m_hideTimer->setSingleShot(true);
     connect(m_hideTimer, &QTimer::timeout, this, [this]() {
         m_fadeAnimation->stop();
         m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
         m_fadeAnimation->setEndValue(0.0);
-        connect(m_fadeAnimation, &QPropertyAnimation::finished, this, [this]() {
-            if (m_opacityEffect->opacity() <= 0.01) {
-                hide();
-            }
-        });
         m_fadeAnimation->start();
     });
 
@@ -57,7 +57,6 @@ void OsdNotification::showMessage(const QString& text, int durationMs) {
 
     m_hideTimer->stop();
     m_fadeAnimation->stop();
-    m_fadeAnimation->disconnect(SIGNAL(finished()));
     m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
     m_fadeAnimation->setEndValue(1.0);
     m_fadeAnimation->start();

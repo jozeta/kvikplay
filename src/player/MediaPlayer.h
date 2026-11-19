@@ -29,6 +29,8 @@ public:
 
     void seekRelative(double seconds);
     void seekAbsolute(double seconds, bool exact = true);
+    void stepFrame() { if (m_controller) m_controller->stepFrame(); }
+    void stepFrameBack() { if (m_controller) m_controller->stepFrameBack(); }
 
     void setVolume(int volumePercent);
     void adjustVolume(int deltaPercent);

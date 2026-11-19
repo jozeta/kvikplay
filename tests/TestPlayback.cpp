@@ -142,10 +142,17 @@ int main(int argc, char* argv[]) {
     player.setSpeed(1.0);
     assert(player.speed() == 1.0);
 
-    // Test Stream Stats
+    // Test Frame Stepping
+    std::cout << "[TestPlayback] Testing Frame Stepping..." << std::endl;
+    player.stepFrame();
+    player.stepFrameBack();
+
+    // Test Stream Stats & Caching
     std::cout << "[TestPlayback] Testing Stream Stats..." << std::endl;
     auto stats = player.streamStats();
     assert(stats.width > 0 || stats.fps >= 0.0);
+    auto stats2 = player.streamStats();
+    assert(stats2.fileFormat == stats.fileFormat);
 
     // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;

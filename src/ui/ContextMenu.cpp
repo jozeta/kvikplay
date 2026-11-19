@@ -38,6 +38,9 @@ ContextMenu::ContextMenu(QWidget* parent)
         "}"
     ));
 
+    m_openFileAction = addAction(QStringLiteral("Open File..."), this, &ContextMenu::openFileTriggered);
+    m_openFileAction->setShortcut(QKeySequence::Open);
+
     m_playPauseAction = addAction(QStringLiteral("Play"), this, &ContextMenu::playPauseTriggered);
     m_playPauseAction->setShortcut(QKeySequence(Qt::Key_Space));
 

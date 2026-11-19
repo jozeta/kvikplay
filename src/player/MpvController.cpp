@@ -56,7 +56,7 @@ bool MpvController::initialize() {
     // Fast in-memory cache for seamless jumping back/forth
     mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "15");
     mpv_set_option_string(m_mpv, "demuxer-max-bytes", "134217728"); // 128 MiB
-    mpv_set_option_string(m_mpv, "demuxer-lavf-o", "probesize=1000000,analyzeduration=1000000");
+    mpv_set_option_string(m_mpv, "demuxer-lavf-o", "probesize=500000,analyzeduration=500000");
 
     // Audio pitch correction
     mpv_set_option_string(m_mpv, "audio-pitch-correction", "yes");
@@ -82,8 +82,9 @@ bool MpvController::initialize() {
     mpv_set_option_string(m_mpv, "gamut-clipping", "yes");
     mpv_set_option_string(m_mpv, "hdr-compute-peak", "yes");
 
-    // Subtitle auto-loading matching files in same folder
+    // Subtitle auto-loading matching files in same folder & auto character encoding detection
     mpv_set_option_string(m_mpv, "sub-auto", "fuzzy");
+    mpv_set_option_string(m_mpv, "sub-codepage", "auto");
 
     // Position subtitles cleanly above the bottom controls area
     mpv_set_option_string(m_mpv, "sub-margin-y", "70");
@@ -328,6 +329,7 @@ void MpvController::updateTracks() {
             m_mediaInfo.audioTracks = std::move(audio);
             m_mediaInfo.videoTracks = std::move(video);
             m_mediaInfo.subtitleTracks = std::move(sub);
+            m_staticStatsCached = false;
             emit tracksChanged(m_mediaInfo.audioTracks, m_mediaInfo.videoTracks, m_mediaInfo.subtitleTracks);
         }
         mpv_free_node_contents(&node);
@@ -356,6 +358,7 @@ void MpvController::loadFile(const QString& filePath) {
     if (!m_mpv) return;
 
     m_mediaInfo = MediaInfo{};
+    m_staticStatsCached = false;
     m_mediaInfo.filePath = filePath;
     QFileInfo fi(filePath);
     m_mediaInfo.fileName = fi.fileName();
@@ -415,6 +418,18 @@ void MpvController::seekAbsolute(double seconds, bool exact) {
     QByteArray secStr = QByteArray::number(clamped, 'f', 2);
     const char* mode = exact ? "absolute+exact" : "absolute+keyframes";
     const char* cmd[] = {"seek", secStr.constData(), mode, nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+}
+
+void MpvController::stepFrame() {
+    if (!m_mpv) return;
+    const char* cmd[] = {"frame-step", nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+}
+
+void MpvController::stepFrameBack() {
+    if (!m_mpv) return;
+    const char* cmd[] = {"frame-back-step", nullptr};
     mpv_command_async(m_mpv, 0, cmd);
 }
 
@@ -558,12 +573,43 @@ StreamStats MpvController::streamStats() const {
     stats.displayWidth = m_mediaInfo.displayWidth;
     stats.displayHeight = m_mediaInfo.displayHeight;
 
-    char* fmt = mpv_get_property_string(m_mpv, "file-format");
-    if (fmt) { stats.fileFormat = QString::fromUtf8(fmt).toUpper(); mpv_free(fmt); }
+    if (!m_staticStatsCached) {
+        char* fmt = mpv_get_property_string(m_mpv, "file-format");
+        if (fmt) { m_cachedStats.fileFormat = QString::fromUtf8(fmt).toUpper(); mpv_free(fmt); }
 
-    char* vcodec = mpv_get_property_string(m_mpv, "video-codec");
-    if (vcodec) { stats.videoCodec = QString::fromUtf8(vcodec); mpv_free(vcodec); }
+        char* vcodec = mpv_get_property_string(m_mpv, "video-codec");
+        if (vcodec) { m_cachedStats.videoCodec = QString::fromUtf8(vcodec); mpv_free(vcodec); }
 
+        char* hw = mpv_get_property_string(m_mpv, "hwdec-current");
+        if (hw) { m_cachedStats.hwdec = QString::fromUtf8(hw); mpv_free(hw); }
+        if (m_cachedStats.hwdec.isEmpty() || m_cachedStats.hwdec == "no") {
+            m_cachedStats.hwdec = QStringLiteral("Software");
+        }
+
+        char* acodec = mpv_get_property_string(m_mpv, "audio-codec-name");
+        if (acodec) { m_cachedStats.audioCodec = QString::fromUtf8(acodec); mpv_free(acodec); }
+
+        int64_t ach = 0;
+        if (mpv_get_property(m_mpv, "audio-params/channel-count", MPV_FORMAT_INT64, &ach) >= 0) {
+            m_cachedStats.audioChannels = static_cast<int>(ach);
+        }
+
+        int64_t samplerate = 0;
+        if (mpv_get_property(m_mpv, "audio-params/samplerate", MPV_FORMAT_INT64, &samplerate) >= 0) {
+            m_cachedStats.audioSampleRate = static_cast<int>(samplerate);
+        }
+
+        m_staticStatsCached = true;
+    }
+
+    stats.fileFormat = m_cachedStats.fileFormat;
+    stats.videoCodec = m_cachedStats.videoCodec;
+    stats.hwdec = m_cachedStats.hwdec;
+    stats.audioCodec = m_cachedStats.audioCodec;
+    stats.audioChannels = m_cachedStats.audioChannels;
+    stats.audioSampleRate = m_cachedStats.audioSampleRate;
+
+    // Dynamically query real-time performance properties
     double fps = 0.0;
     if (mpv_get_property(m_mpv, "container-fps", MPV_FORMAT_DOUBLE, &fps) >= 0 && fps > 0.0) {
         stats.fps = fps;
@@ -576,28 +622,9 @@ StreamStats MpvController::streamStats() const {
         stats.videoBitrate = vbitrate / 1000.0; // kbps
     }
 
-    char* hw = mpv_get_property_string(m_mpv, "hwdec-current");
-    if (hw) { stats.hwdec = QString::fromUtf8(hw); mpv_free(hw); }
-    if (stats.hwdec.isEmpty() || stats.hwdec == "no") {
-        stats.hwdec = QStringLiteral("Software");
-    }
-
     int64_t drops = 0;
     if (mpv_get_property(m_mpv, "frame-drop-count", MPV_FORMAT_INT64, &drops) >= 0) {
         stats.dropCount = static_cast<int>(drops);
-    }
-
-    char* acodec = mpv_get_property_string(m_mpv, "audio-codec-name");
-    if (acodec) { stats.audioCodec = QString::fromUtf8(acodec); mpv_free(acodec); }
-
-    int64_t ach = 0;
-    if (mpv_get_property(m_mpv, "audio-params/channel-count", MPV_FORMAT_INT64, &ach) >= 0) {
-        stats.audioChannels = static_cast<int>(ach);
-    }
-
-    int64_t samplerate = 0;
-    if (mpv_get_property(m_mpv, "audio-params/samplerate", MPV_FORMAT_INT64, &samplerate) >= 0) {
-        stats.audioSampleRate = static_cast<int>(samplerate);
     }
 
     double abitrate = 0.0;

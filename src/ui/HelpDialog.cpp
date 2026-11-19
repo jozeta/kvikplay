@@ -94,7 +94,7 @@ HelpDialog::HelpDialog(QWidget* parent)
         "• <b>Play & Pause</b>: Quick right-click or trackpad two-finger tap toggles Play / Pause.<br/>"
         "• <b>Context Menu</b>: Hold right-click or trackpad click for 0.5s to open the menu.<br/>"
         "• <b>Move & Resize</b>: Drag anywhere with left-click to move. Drag the generous 32px corners to resize.<br/>"
-        "• <b>Drag & Drop</b>: Drop any video, audio, or subtitle file (.srt, .vtt, .ass) directly onto the player."
+        "• <b>Drag & Drop</b>: Drop any video, audio, subtitle file (.srt, .vtt, .ass), or media folder directly onto the player."
         "</div>"
     ));
     contentLayout->addWidget(guideBox);
@@ -108,8 +108,11 @@ HelpDialog::HelpDialog(QWidget* parent)
         "    <th align='left' style='padding-bottom: 6px;'>Action</th>"
         "    <th align='right' style='padding-bottom: 6px;'>Shortcut</th>"
         "  </tr>"
+        "  <tr><td>Open File...</td><td align='right'><b>Cmd+O / Ctrl+O</b></td></tr>"
         "  <tr><td>Play / Pause</td><td align='right'><b>Space / Right-Click</b></td></tr>"
         "  <tr><td>Quick 2.0x Speed Boost</td><td align='right'><b>Hold C / Hold &gt;&gt;</b></td></tr>"
+        "  <tr><td>Speed &plusmn;0.1x / Reset 1.0x</td><td align='right'><b>- / = / Backspace</b></td></tr>"
+        "  <tr><td>Frame Step Forward / Backward</td><td align='right'><b>. / ,</b></td></tr>"
         "  <tr><td>Seek &plusmn;10s / &plusmn;30s</td><td align='right'><b>Left/Right / Shift+Left/Right</b></td></tr>"
         "  <tr><td>Volume &plusmn;5% / Mute</td><td align='right'><b>Up / Down / M</b></td></tr>"
         "  <tr><td>Next / Prev File in Folder</td><td align='right'><b>] / [ &nbsp;or&nbsp; PageDown / PageUp</b></td></tr>"

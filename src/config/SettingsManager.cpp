@@ -149,7 +149,7 @@ void SettingsManager::save() const {
     QFile file(path);
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         QJsonDocument doc(obj);
-        file.write(doc.toJson(QJsonDocument::Indented));
+        file.write(doc.toJson(QJsonDocument::Compact));
         file.close();
     }
 }

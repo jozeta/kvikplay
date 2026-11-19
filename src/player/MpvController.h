@@ -29,6 +29,8 @@ public:
 
     void seekRelative(double seconds);
     void seekAbsolute(double seconds, bool exact = true);
+    void stepFrame();
+    void stepFrameBack();
 
     void setVolume(int percent);
     void adjustVolume(int deltaPercent);
@@ -116,6 +118,8 @@ private:
     double m_subtitleDelay{0.0};
     int m_currentChapter{0};
     std::atomic<bool> m_wakeupPending{false};
+    mutable StreamStats m_cachedStats;
+    mutable bool m_staticStatsCached{false};
 };
 
 } // namespace kvikplay

@@ -411,11 +411,17 @@ void PlaybackOverlay::showOverlay() {
     m_timelineSlider->setPosition(m_position);
     m_lastReportedSec = static_cast<int>(m_position);
     updateTimeLabel();
-    show();
-    m_fadeAnimation->stop();
-    m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
-    m_fadeAnimation->setEndValue(1.0);
-    m_fadeAnimation->start();
+
+    if (!isVisible()) {
+        show();
+    }
+
+    if (m_opacityEffect->opacity() < 0.99 || (m_fadeAnimation->state() == QAbstractAnimation::Running && m_fadeAnimation->endValue().toDouble() != 1.0)) {
+        m_fadeAnimation->stop();
+        m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
+        m_fadeAnimation->setEndValue(1.0);
+        m_fadeAnimation->start();
+    }
 }
 
 void PlaybackOverlay::hideOverlay() {

@@ -28,10 +28,10 @@ void ThumbnailWorker::requestThumbnail(double timestamp) {
     int key = static_cast<int>(std::round(timestamp));
     {
         QMutexLocker locker(&m_mutex);
-        if (m_cache.contains(key)) {
-            QImage cached = *m_cache[key];
+        if (QImage* cached = m_cache.object(key)) {
+            QImage imgCopy = *cached;
             locker.unlock();
-            emit thumbnailReady(timestamp, cached);
+            emit thumbnailReady(timestamp, imgCopy);
             return;
         }
 
@@ -57,6 +57,8 @@ void ThumbnailWorker::initMpv() {
     mpv_set_option_string(m_mpv, "audio", "no");
     mpv_set_option_string(m_mpv, "sub", "no");
     mpv_set_option_string(m_mpv, "pause", "yes");
+    mpv_set_option_string(m_mpv, "hr-seek", "no");
+    mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "0");
     mpv_set_option_string(m_mpv, "vd-lavc-skiploopfilter", "all");
     mpv_set_option_string(m_mpv, "vd-lavc-fast", "yes");
     mpv_set_option_string(m_mpv, "vd-lavc-threads", "2");
@@ -108,6 +110,15 @@ bool ThumbnailWorker::renderFrame(double timestamp, QImage& outImage) {
 
     int w = 160;
     int h = 90;
+    if (m_aspectRatio >= (16.0 / 9.0)) {
+        w = 160;
+        h = static_cast<int>(std::round(160.0 / m_aspectRatio));
+    } else if (m_aspectRatio > 0.05) {
+        h = 90;
+        w = static_cast<int>(std::round(90.0 * m_aspectRatio));
+    }
+    w = std::clamp(w, 32, 160);
+    h = std::clamp(h, 32, 90);
     outImage = QImage(w, h, QImage::Format_RGB32);
     size_t stride = outImage.bytesPerLine();
     int size[2] = {w, h};
@@ -162,6 +173,18 @@ void ThumbnailWorker::run() {
             for (int i = 0; i < 60 && m_running.load(); ++i) {
                 mpv_event* ev = mpv_wait_event(m_mpv, 0.05);
                 if (ev->event_id == MPV_EVENT_FILE_LOADED) break;
+            }
+
+            double dar = 0.0;
+            if (mpv_get_property(m_mpv, "video-params/aspect", MPV_FORMAT_DOUBLE, &dar) >= 0 && dar > 0.05) {
+                m_aspectRatio = dar;
+            } else {
+                int64_t vidW = 0, vidH = 0;
+                mpv_get_property(m_mpv, "video-params/w", MPV_FORMAT_INT64, &vidW);
+                mpv_get_property(m_mpv, "video-params/h", MPV_FORMAT_INT64, &vidH);
+                if (vidW > 0 && vidH > 0) {
+                    m_aspectRatio = static_cast<double>(vidW) / vidH;
+                }
             }
         }
 

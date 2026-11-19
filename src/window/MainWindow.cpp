@@ -19,6 +19,8 @@
 #include <QCollator>
 #include <QDir>
 #include <QClipboard>
+#include <QFileDialog>
+#include <QStandardPaths>
 #include <algorithm>
 #include <cmath>
 
@@ -71,9 +73,20 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
     connect(m_overlay, &PlaybackOverlay::thumbnailRequested, this, &MainWindow::onThumbnailRequested);
     connect(m_overlay, &PlaybackOverlay::speedBoostRequested, this, [this](bool active) {
-        m_speedBoostActive = active;
-        m_player->setSpeed(active ? 2.0 : 1.0);
-        m_overlay->showOsd(active ? QStringLiteral("Speed 2.0x") : QStringLiteral("Speed 1.0x"));
+        if (active) {
+            if (!m_speedBoostActive) {
+                m_speedBoostActive = true;
+                m_preBoostSpeed = m_player->speed();
+                m_player->setSpeed(2.0);
+                m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
+            }
+        } else {
+            if (m_speedBoostActive) {
+                m_speedBoostActive = false;
+                m_player->setSpeed(m_preBoostSpeed);
+                m_overlay->showOsd(QStringLiteral("Speed %1x").arg(m_preBoostSpeed, 0, 'f', 1));
+            }
+        }
     });
 
     if (m_thumbnailWorker) {
@@ -99,6 +112,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::chapterChanged, this, &MainWindow::onChapterChanged);
 
     // Context menu connections
+    connect(m_contextMenu, &ContextMenu::openFileTriggered, this, &MainWindow::openFileDialog);
     connect(m_contextMenu, &ContextMenu::playPauseTriggered, m_player.get(), &MediaPlayer::togglePlayPause);
     connect(m_contextMenu, &ContextMenu::alwaysOnTopToggled, this, &MainWindow::setAlwaysOnTop);
     connect(m_contextMenu, &ContextMenu::fullscreenToggled, this, &MainWindow::toggleFullscreen);
@@ -261,6 +275,23 @@ bool MainWindow::initialize() {
     }
 
     return true;
+}
+
+void MainWindow::openFileDialog() {
+    QString filter = FormatRegistry::instance().fileFilterString();
+    QString startDir;
+    if (!m_currentFilePath.isEmpty()) {
+        startDir = QFileInfo(m_currentFilePath).absolutePath();
+    } else {
+        startDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
+        if (startDir.isEmpty()) {
+            startDir = QDir::homePath();
+        }
+    }
+    QString selected = QFileDialog::getOpenFileName(this, QStringLiteral("Open Video or Audio"), startDir, filter);
+    if (!selected.isEmpty()) {
+        openFile(selected);
+    }
 }
 
 void MainWindow::openFile(const QString& filePath) {
@@ -997,7 +1028,8 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
         for (const auto& url : urls) {
             if (url.isLocalFile()) {
                 QString localPath = url.toLocalFile();
-                if (isSubtitleFile(localPath) || FormatRegistry::instance().isSupported(localPath)) {
+                QFileInfo fi(localPath);
+                if (fi.isDir() || isSubtitleFile(localPath) || FormatRegistry::instance().isSupported(localPath)) {
                     event->acceptProposedAction();
                     return;
                 }
@@ -1013,9 +1045,31 @@ void MainWindow::dropEvent(QDropEvent* event) {
         for (const auto& url : urls) {
             if (url.isLocalFile()) {
                 QString localPath = url.toLocalFile();
-                if (isSubtitleFile(localPath)) {
+                QFileInfo fi(localPath);
+                if (fi.isDir()) {
+                    // Find first media file in directory using natural sorting
+                    QDir dir(localPath);
+                    QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Readable, QDir::NoSort);
+                    QStringList mediaFiles;
+                    for (const auto& entry : entries) {
+                        if (FormatRegistry::instance().isSupported(entry.fileName())) {
+                            mediaFiles.push_back(entry.absoluteFilePath());
+                        }
+                    }
+                    if (!mediaFiles.isEmpty()) {
+                        QCollator collator;
+                        collator.setNumericMode(true);
+                        collator.setCaseSensitivity(Qt::CaseInsensitive);
+                        std::sort(mediaFiles.begin(), mediaFiles.end(), [&collator](const QString& a, const QString& b) {
+                            return collator.compare(a, b) < 0;
+                        });
+                        openFile(mediaFiles.first());
+                        event->acceptProposedAction();
+                        return;
+                    }
+                } else if (isSubtitleFile(localPath)) {
                     m_player->addSubtitleTrack(localPath);
-                    m_overlay->showOsd(QStringLiteral("Subtitles: %1").arg(QFileInfo(localPath).fileName()));
+                    m_overlay->showOsd(QStringLiteral("Subtitles: %1").arg(fi.fileName()));
                     event->acceptProposedAction();
                     return;
                 } else if (FormatRegistry::instance().isSupported(localPath)) {
@@ -1030,6 +1084,11 @@ void MainWindow::dropEvent(QDropEvent* event) {
 }
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if (event->matches(QKeySequence::Open) || ((event->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)) && event->key() == Qt::Key_O)) {
+        openFileDialog();
+        return;
+    }
+
     switch (event->key()) {
     case Qt::Key_1:
         applyWindowScale(1.0);
@@ -1041,8 +1100,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         applyWindowScale(0.25);
         break;
     case Qt::Key_C:
-        if (!event->isAutoRepeat()) {
+        if (!event->isAutoRepeat() && !m_speedBoostActive) {
             m_speedBoostActive = true;
+            m_preBoostSpeed = m_player->speed();
             m_player->setSpeed(2.0);
             m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
         }
@@ -1086,6 +1146,33 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         break;
     case Qt::Key_N:
         toggleDialogueBoost();
+        break;
+    case Qt::Key_Period:
+        m_player->stepFrame();
+        m_overlay->showOsd(QStringLiteral("Frame Step +1"));
+        break;
+    case Qt::Key_Comma:
+        m_player->stepFrameBack();
+        m_overlay->showOsd(QStringLiteral("Frame Step -1"));
+        break;
+    case Qt::Key_Minus: {
+        double curSpd = m_player->speed();
+        double newSpd = std::clamp(std::round((curSpd - 0.1) * 10.0) / 10.0, 0.25, 4.0);
+        m_player->setSpeed(newSpd);
+        m_overlay->showOsd(QStringLiteral("Speed %1x").arg(newSpd, 0, 'f', 1));
+        break;
+    }
+    case Qt::Key_Equal:
+    case Qt::Key_Plus: {
+        double curSpd = m_player->speed();
+        double newSpd = std::clamp(std::round((curSpd + 0.1) * 10.0) / 10.0, 0.25, 4.0);
+        m_player->setSpeed(newSpd);
+        m_overlay->showOsd(QStringLiteral("Speed %1x").arg(newSpd, 0, 'f', 1));
+        break;
+    }
+    case Qt::Key_Backspace:
+        m_player->setSpeed(1.0);
+        m_overlay->showOsd(QStringLiteral("Speed 1.0x"));
         break;
     case Qt::Key_Space:
         m_player->togglePlayPause();
@@ -1150,9 +1237,11 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 
 void MainWindow::keyReleaseEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_C && !event->isAutoRepeat()) {
-        m_speedBoostActive = false;
-        m_player->setSpeed(1.0);
-        m_overlay->showOsd(QStringLiteral("Speed 1.0x"));
+        if (m_speedBoostActive) {
+            m_speedBoostActive = false;
+            m_player->setSpeed(m_preBoostSpeed);
+            m_overlay->showOsd(QStringLiteral("Speed %1x").arg(m_preBoostSpeed, 0, 'f', 1));
+        }
         return;
     }
     QWidget::keyReleaseEvent(event);

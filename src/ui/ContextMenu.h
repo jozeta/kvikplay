@@ -24,6 +24,7 @@ public:
                    const std::vector<TrackInfo>& sub);
 
 signals:
+    void openFileTriggered();
     void playPauseTriggered();
     void alwaysOnTopToggled(bool onTop);
     void fileAssociationsTriggered();
@@ -43,6 +44,7 @@ signals:
     void subtitleTrackSelected(int id);
 
 private:
+    QAction* m_openFileAction{nullptr};
     QAction* m_playPauseAction{nullptr};
     QAction* m_alwaysOnTopAction{nullptr};
     QAction* m_fullscreenAction{nullptr};

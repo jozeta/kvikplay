@@ -94,6 +94,11 @@ VolumeControl::VolumeControl(QWidget* parent)
     });
 
     m_sliderAnim->setDuration(150);
+    connect(m_sliderAnim, &QPropertyAnimation::finished, this, [this]() {
+        if (m_sliderOpacity->opacity() <= 0.05) {
+            m_sliderContainer->hide();
+        }
+    });
     m_sliderHideTimer->setSingleShot(true);
     connect(m_sliderHideTimer, &QTimer::timeout, this, &VolumeControl::hideSlider);
 
@@ -143,11 +148,6 @@ void VolumeControl::hideSlider() {
     m_sliderAnim->stop();
     m_sliderAnim->setStartValue(m_sliderOpacity->opacity());
     m_sliderAnim->setEndValue(0.0);
-    connect(m_sliderAnim, &QPropertyAnimation::finished, this, [this]() {
-        if (m_sliderOpacity->opacity() <= 0.05) {
-            m_sliderContainer->hide();
-        }
-    });
     m_sliderAnim->start();
 }
 
