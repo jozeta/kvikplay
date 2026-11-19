@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icons/play.svg">icons/play.svg</file>
+        <file alias="icons/pause.svg">icons/pause.svg</file>
+        <file alias="icons/seek_backward.svg">icons/seek_backward.svg</file>
+        <file alias="icons/seek_forward.svg">icons/seek_forward.svg</file>
+        <file alias="icons/volume_high.svg">icons/volume_high.svg</file>
+        <file alias="icons/volume_mute.svg">icons/volume_mute.svg</file>
+        <file alias="icons/close.svg">icons/close.svg</file>
+        <file alias="icons/audio_disc.svg">icons/audio_disc.svg</file>
+        <file alias="icons/app_icon.svg">icons/app_icon.svg</file>
+    </qresource>
+</RCC>
