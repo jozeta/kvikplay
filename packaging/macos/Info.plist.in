@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>@MACOSX_BUNDLE_EXECUTABLE_NAME@</string>
+    <string>kvikplay</string>
     <key>CFBundleGetInfoString</key>
     <string>Kvikplay 1.0.0, Fast Minimalist Media Player</string>
     <key>CFBundleIconFile</key>

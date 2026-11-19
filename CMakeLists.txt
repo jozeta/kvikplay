@@ -145,6 +145,12 @@ if(APPLE)
 
     add_executable(generate_icon packaging/macos/generate_icon.cpp)
     target_link_libraries(generate_icon PRIVATE Qt6::Core Qt6::Gui Qt6::Svg)
+
+    add_custom_target(standalone_bundle
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_macos.sh "${CMAKE_CURRENT_BINARY_DIR}/kvikplay.app"
+        DEPENDS kvikplay
+        COMMENT "Bundling all dependencies to create a standalone portable macOS app"
+    )
 elseif(WIN32)
     target_link_libraries(kvikplay PRIVATE
         dwmapi
