@@ -3,3 +3,4 @@ build/
 *.user
 *.swp
 test_media/
+*.iconset/

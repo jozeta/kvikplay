@@ -85,9 +85,16 @@ if(APPLE)
     set(CMAKE_OBJCXX_STANDARD 20)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
+    set(MACOSX_BUNDLE_ICON_FILE "kvikplay.icns")
+    set(MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/kvikplay.icns")
+    set_source_files_properties(${MACOS_ICON} PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources"
+    )
+
     set(PLATFORM_SOURCES
         src/platform/macos/MacOSIntegration.h
         src/platform/macos/MacOSIntegration.mm
+        ${MACOS_ICON}
     )
 elseif(WIN32)
     set(PLATFORM_SOURCES
@@ -132,8 +139,12 @@ if(APPLE)
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.kvikplay.player"
         MACOSX_BUNDLE_BUNDLE_NAME "Kvikplay"
+        MACOSX_BUNDLE_ICON_FILE "kvikplay.icns"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in"
     )
+
+    add_executable(generate_icon packaging/macos/generate_icon.cpp)
+    target_link_libraries(generate_icon PRIVATE Qt6::Core Qt6::Gui Qt6::Svg)
 elseif(WIN32)
     target_link_libraries(kvikplay PRIVATE
         dwmapi

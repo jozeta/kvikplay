@@ -1,10 +1,106 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#2c3038" />
-      <stop offset="100%" stop-color="#121316" />
+    <!-- Background Gradient: Deep Nordic Midnight -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#181d28" />
+      <stop offset="50%" stop-color="#0f131c" />
+      <stop offset="100%" stop-color="#07090d" />
     </linearGradient>
+
+    <!-- Radial Ambient Glow -->
+    <radialGradient id="ambientGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#00d2ff" stop-opacity="0.18" />
+      <stop offset="50%" stop-color="#0066cc" stop-opacity="0.06" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Rim Light Gradient -->
+    <linearGradient id="rimGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25" />
+      <stop offset="30%" stop-color="#ffffff" stop-opacity="0.08" />
+      <stop offset="80%" stop-color="#ffffff" stop-opacity="0.02" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.06" />
+    </linearGradient>
+
+    <!-- Border Gradient -->
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3d4960" />
+      <stop offset="50%" stop-color="#1f2533" />
+      <stop offset="100%" stop-color="#141822" />
+    </linearGradient>
+
+    <!-- Primary Chevron (Nordic Cyan/Azure) -->
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4facfe" />
+      <stop offset="50%" stop-color="#00f2fe" />
+      <stop offset="100%" stop-color="#00a8ff" />
+    </linearGradient>
+
+    <!-- Core Play Glyph (Pure Platinum/White) -->
+    <linearGradient id="whiteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="60%" stop-color="#f0f6ff" />
+      <stop offset="100%" stop-color="#d6e4ff" />
+    </linearGradient>
+
+    <!-- Speed Arc Gradient -->
+    <linearGradient id="speedArc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0" />
+      <stop offset="50%" stop-color="#00f2fe" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#4facfe" stop-opacity="0" />
+    </linearGradient>
+
+    <!-- Drop Shadows -->
+    <filter id="shadowFilter" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="24" stdDeviation="32" flood-color="#000000" flood-opacity="0.55" />
+    </filter>
+    <filter id="glyphGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#00d2ff" flood-opacity="0.35" />
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
   </defs>
-  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#grad)" stroke="#3f4552" stroke-width="3" />
-  <polygon points="50,40 92,64 50,88" fill="#ffffff" />
+
+  <!-- macOS App Icon Squircle Canvas (824x824 at 100,100) with Drop Shadow -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bgGrad)" filter="url(#shadowFilter)" stroke="url(#borderGrad)" stroke-width="3" />
+
+  <!-- Radial Core Light -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#ambientGlow)" />
+
+  <!-- Inner Top Rim Highlight -->
+  <rect x="103" y="103" width="818" height="818" rx="183" fill="none" stroke="url(#rimGrad)" stroke-width="2" />
+
+  <!-- Subtle Nordic Speed Arc / Horizon -->
+  <path d="M 180 512 A 332 332 0 0 1 844 512" fill="none" stroke="url(#speedArc)" stroke-width="3" stroke-dasharray="8 12" opacity="0.6" />
+
+  <!-- Central Play & Fast-Forward Nordic Emblem -->
+  <g filter="url(#glyphGlow)">
+    <!-- First Chevron (Trail/Speed Wing in Cyan) -->
+    <path d="M 370 345 
+             C 382 334 400 336 410 348 
+             L 530 492 
+             C 540 504 540 520 530 532 
+             L 410 676 
+             C 400 688 382 690 370 679 
+             C 358 668 356 650 367 638 
+             L 472 512 
+             L 367 386 
+             C 356 374 358 356 370 345 Z" 
+          fill="url(#cyanGrad)" />
+
+    <!-- Second Chevron / Core Play Triangle (Vibrant Pure White) -->
+    <path d="M 520 345 
+             C 532 334 550 336 560 348 
+             L 680 492 
+             C 690 504 690 520 680 532 
+             L 560 676 
+             C 550 688 532 690 520 679 
+             C 508 668 506 650 517 638 
+             L 622 512 
+             L 517 386 
+             C 506 374 508 356 520 345 Z" 
+          fill="url(#whiteGrad)" />
+  </g>
+
+  <!-- Subtle Specular Reflection Glass Sheen Across Top-Left Corner -->
+  <path d="M 103 288 C 103 186 186 103 288 103 L 640 103 L 103 640 Z" fill="#ffffff" opacity="0.025" />
 </svg>
