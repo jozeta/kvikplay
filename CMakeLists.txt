@@ -69,6 +69,10 @@ set(KVIKPLAY_SOURCES
     src/ui/TimelinePreviewCard.cpp
     src/ui/ContextMenu.h
     src/ui/ContextMenu.cpp
+    src/ui/MediaInspectorOverlay.h
+    src/ui/MediaInspectorOverlay.cpp
+    src/ui/HelpDialog.h
+    src/ui/HelpDialog.cpp
     src/ui/FileAssociationDialog.h
     src/ui/FileAssociationDialog.cpp
     src/platform/PlatformIntegration.h

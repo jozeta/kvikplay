@@ -61,8 +61,20 @@ bool MpvController::initialize() {
     // Audio pitch correction
     mpv_set_option_string(m_mpv, "audio-pitch-correction", "yes");
 
-    // Hardware decoding: try auto-safe (VideoToolbox on macOS, D3D11VA on Windows)
+    // Hardware decoding & rendering optimization:
+    // VideoToolbox on macOS (native Apple Silicon / Intel decoders), D3D11VA on Windows
+#if defined(Q_OS_MACOS)
+    mpv_set_option_string(m_mpv, "hwdec", "videotoolbox");
+    mpv_set_option_string(m_mpv, "videotoolbox-format", "auto");
+    mpv_set_option_string(m_mpv, "opengl-pbo", "yes");
+#elif defined(Q_OS_WIN)
+    mpv_set_option_string(m_mpv, "hwdec", "d3d11va");
+    mpv_set_option_string(m_mpv, "gpu-api", "d3d11");
+#else
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
+#endif
+    mpv_set_option_string(m_mpv, "hwdec-codecs", "all");
+    mpv_set_option_string(m_mpv, "video-sync", "audio");
 
     // HDR Tone-Mapping, Wide Gamut & Color Accuracy
     mpv_set_option_string(m_mpv, "target-colorspace-hint", "yes");
@@ -93,6 +105,9 @@ bool MpvController::initialize() {
     mpv_observe_property(m_mpv, 7, "video-params", MPV_FORMAT_NODE);
     mpv_observe_property(m_mpv, 8, "eof-reached", MPV_FORMAT_FLAG);
     mpv_observe_property(m_mpv, 9, "track-list", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, 10, "sub-delay", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, 11, "chapter", MPV_FORMAT_INT64);
+    mpv_observe_property(m_mpv, 12, "chapter-list", MPV_FORMAT_NODE);
 
     mpv_set_wakeup_callback(m_mpv, onMpvWakeup, this);
     return true;
@@ -129,6 +144,7 @@ void MpvController::handleMpvEvent(mpv_event* event) {
         m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
         updateVideoParams();
         updateTracks();
+        updateChapters();
         emit playbackStateChanged(m_state);
         emit mediaLoaded(m_mediaInfo);
         break;
@@ -197,6 +213,14 @@ void MpvController::handlePropertyChange(mpv_event_property* prop) {
         updateVideoParams();
     } else if (name == "track-list") {
         updateTracks();
+    } else if (name == "sub-delay" && prop->format == MPV_FORMAT_DOUBLE) {
+        m_subtitleDelay = *static_cast<double*>(prop->data);
+        emit subtitleDelayChanged(m_subtitleDelay);
+    } else if (name == "chapter" && prop->format == MPV_FORMAT_INT64) {
+        m_currentChapter = static_cast<int>(*static_cast<int64_t*>(prop->data));
+        emit chapterChanged(m_currentChapter, currentChapterTitle());
+    } else if (name == "chapter-list") {
+        updateChapters();
     } else if (name == "eof-reached" && prop->format == MPV_FORMAT_FLAG) {
         int eof = *static_cast<int*>(prop->data);
         if (eof) {
@@ -385,11 +409,12 @@ void MpvController::seekRelative(double seconds) {
     mpv_command_async(m_mpv, 0, cmd);
 }
 
-void MpvController::seekAbsolute(double seconds) {
+void MpvController::seekAbsolute(double seconds, bool exact) {
     if (!m_mpv) return;
     double clamped = std::clamp(seconds, 0.0, std::max(0.0, m_duration));
     QByteArray secStr = QByteArray::number(clamped, 'f', 2);
-    const char* cmd[] = {"seek", secStr.constData(), "absolute", nullptr};
+    const char* mode = exact ? "absolute+exact" : "absolute+keyframes";
+    const char* cmd[] = {"seek", secStr.constData(), mode, nullptr};
     mpv_command_async(m_mpv, 0, cmd);
 }
 
@@ -459,6 +484,128 @@ void MpvController::addSubtitleTrack(const QString& filePath) {
     mpv_command_async(m_mpv, 0, cmd);
     QFileInfo fi(filePath);
     emit subtitleAdded(fi.fileName());
+}
+
+void MpvController::setSubtitleDelay(double seconds) {
+    if (!m_mpv) return;
+    m_subtitleDelay = seconds;
+    mpv_set_property_async(m_mpv, 0, "sub-delay", MPV_FORMAT_DOUBLE, &seconds);
+    emit subtitleDelayChanged(m_subtitleDelay);
+}
+
+void MpvController::adjustSubtitleDelay(double deltaSeconds) {
+    setSubtitleDelay(m_subtitleDelay + deltaSeconds);
+}
+
+void MpvController::nextChapter() {
+    if (!m_mpv) return;
+    const char* cmd[] = {"add", "chapter", "1", nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+}
+
+void MpvController::previousChapter() {
+    if (!m_mpv) return;
+    const char* cmd[] = {"add", "chapter", "-1", nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+}
+
+QString MpvController::currentChapterTitle() const {
+    if (m_currentChapter >= 0 && m_currentChapter < static_cast<int>(m_mediaInfo.chapters.size())) {
+        return m_mediaInfo.chapters[m_currentChapter].title;
+    }
+    return QStringLiteral("Chapter %1").arg(m_currentChapter + 1);
+}
+
+void MpvController::updateChapters() {
+    if (!m_mpv) return;
+    mpv_node node;
+    if (mpv_get_property(m_mpv, "chapter-list", MPV_FORMAT_NODE, &node) >= 0) {
+        if (node.format == MPV_FORMAT_NODE_ARRAY) {
+            std::vector<ChapterInfo> list;
+            for (int i = 0; i < node.u.list->num; ++i) {
+                const mpv_node& item = node.u.list->values[i];
+                if (item.format == MPV_FORMAT_NODE_MAP) {
+                    ChapterInfo ch;
+                    ch.id = i;
+                    for (int k = 0; k < item.u.list->num; ++k) {
+                        const char* key = item.u.list->keys[k];
+                        const mpv_node& val = item.u.list->values[k];
+                        if (std::strcmp(key, "title") == 0 && val.format == MPV_FORMAT_STRING) {
+                            ch.title = QString::fromUtf8(val.u.string);
+                        } else if (std::strcmp(key, "time") == 0 && val.format == MPV_FORMAT_DOUBLE) {
+                            ch.time = val.u.double_;
+                        }
+                    }
+                    if (ch.title.isEmpty()) {
+                        ch.title = QStringLiteral("Chapter %1").arg(i + 1);
+                    }
+                    list.push_back(ch);
+                }
+            }
+            m_mediaInfo.chapters = list;
+            emit chaptersChanged(m_mediaInfo.chapters);
+        }
+        mpv_free_node_contents(&node);
+    }
+}
+
+StreamStats MpvController::streamStats() const {
+    StreamStats stats;
+    if (!m_mpv) return stats;
+
+    stats.width = m_mediaInfo.width;
+    stats.height = m_mediaInfo.height;
+    stats.displayWidth = m_mediaInfo.displayWidth;
+    stats.displayHeight = m_mediaInfo.displayHeight;
+
+    char* fmt = mpv_get_property_string(m_mpv, "file-format");
+    if (fmt) { stats.fileFormat = QString::fromUtf8(fmt).toUpper(); mpv_free(fmt); }
+
+    char* vcodec = mpv_get_property_string(m_mpv, "video-codec");
+    if (vcodec) { stats.videoCodec = QString::fromUtf8(vcodec); mpv_free(vcodec); }
+
+    double fps = 0.0;
+    if (mpv_get_property(m_mpv, "container-fps", MPV_FORMAT_DOUBLE, &fps) >= 0 && fps > 0.0) {
+        stats.fps = fps;
+    } else if (mpv_get_property(m_mpv, "estimated-vf-fps", MPV_FORMAT_DOUBLE, &fps) >= 0) {
+        stats.fps = fps;
+    }
+
+    double vbitrate = 0.0;
+    if (mpv_get_property(m_mpv, "video-bitrate", MPV_FORMAT_DOUBLE, &vbitrate) >= 0) {
+        stats.videoBitrate = vbitrate / 1000.0; // kbps
+    }
+
+    char* hw = mpv_get_property_string(m_mpv, "hwdec-current");
+    if (hw) { stats.hwdec = QString::fromUtf8(hw); mpv_free(hw); }
+    if (stats.hwdec.isEmpty() || stats.hwdec == "no") {
+        stats.hwdec = QStringLiteral("Software");
+    }
+
+    int64_t drops = 0;
+    if (mpv_get_property(m_mpv, "frame-drop-count", MPV_FORMAT_INT64, &drops) >= 0) {
+        stats.dropCount = static_cast<int>(drops);
+    }
+
+    char* acodec = mpv_get_property_string(m_mpv, "audio-codec-name");
+    if (acodec) { stats.audioCodec = QString::fromUtf8(acodec); mpv_free(acodec); }
+
+    int64_t ach = 0;
+    if (mpv_get_property(m_mpv, "audio-params/channel-count", MPV_FORMAT_INT64, &ach) >= 0) {
+        stats.audioChannels = static_cast<int>(ach);
+    }
+
+    int64_t samplerate = 0;
+    if (mpv_get_property(m_mpv, "audio-params/samplerate", MPV_FORMAT_INT64, &samplerate) >= 0) {
+        stats.audioSampleRate = static_cast<int>(samplerate);
+    }
+
+    double abitrate = 0.0;
+    if (mpv_get_property(m_mpv, "audio-bitrate", MPV_FORMAT_DOUBLE, &abitrate) >= 0) {
+        stats.audioBitrate = abitrate / 1000.0; // kbps
+    }
+
+    return stats;
 }
 
 } // namespace kvikplay

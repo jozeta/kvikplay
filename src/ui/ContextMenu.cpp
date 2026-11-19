@@ -51,6 +51,9 @@ ContextMenu::ContextMenu(QWidget* parent)
     m_fullscreenAction = addAction(QStringLiteral("Fullscreen"), this, &ContextMenu::fullscreenToggled);
     m_fullscreenAction->setShortcut(QKeySequence(Qt::Key_F));
 
+    m_pipAction = addAction(QStringLiteral("Picture-in-Picture"), this, &ContextMenu::pipToggled);
+    m_pipAction->setShortcut(QKeySequence(Qt::Key_P));
+
     addSeparator();
 
     // Track selection submenus
@@ -73,6 +76,9 @@ ContextMenu::ContextMenu(QWidget* parent)
     m_screenshotAction = addAction(QStringLiteral("Take Screenshot"), this, &ContextMenu::screenshotTriggered);
     m_screenshotAction->setShortcut(QKeySequence(Qt::Key_S));
 
+    m_inspectorAction = addAction(QStringLiteral("Media Inspector"), this, &ContextMenu::inspectorToggled);
+    m_inspectorAction->setShortcut(QKeySequence(Qt::Key_I));
+
     addSeparator();
 
     m_reverseTrackpadAction = addAction(QStringLiteral("Reverse Trackpad Scrubbing"));
@@ -82,6 +88,7 @@ ContextMenu::ContextMenu(QWidget* parent)
     addSeparator();
 
     m_fileAssocAction = addAction(QStringLiteral("File Associations..."), this, &ContextMenu::fileAssociationsTriggered);
+    m_helpAction = addAction(QStringLiteral("Help & Shortcuts..."), this, &ContextMenu::helpTriggered);
     m_aboutAction = addAction(QStringLiteral("About"), this, &ContextMenu::aboutTriggered);
 
     addSeparator();

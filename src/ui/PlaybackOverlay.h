@@ -9,6 +9,7 @@
 #include "VolumeControl.h"
 #include "OsdNotification.h"
 #include "TimelinePreviewCard.h"
+#include "player/MediaInfo.h"
 
 namespace kvikplay {
 
@@ -19,9 +20,10 @@ public:
     explicit TimelineSlider(QWidget* parent = nullptr);
 
     bool isDragging() const { return m_dragging; }
+    void setChapters(const std::vector<ChapterInfo>& chapters);
 
 signals:
-    void seekRequested(double seconds);
+    void seekRequested(double seconds, bool exact);
     void draggingPositionChanged(double seconds);
     void hoverMoved(double seconds, int localX);
     void hoverLeft();
@@ -31,6 +33,7 @@ public slots:
     void setPosition(double position);
 
 protected:
+    void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
@@ -43,6 +46,7 @@ private:
     double m_position{0.0};
     bool m_dragging{false};
     qint64 m_lastSeekDispatchMs{0};
+    std::vector<ChapterInfo> m_chapters;
 };
 
 class PlaybackOverlay : public QWidget {
@@ -57,6 +61,7 @@ public:
     void setFileName(const QString& name);
     void setPosition(double seconds);
     void setDuration(double seconds);
+    void setChapters(const std::vector<ChapterInfo>& chapters);
     void setThumbnail(double seconds, const QImage& img);
 
     void showOsd(const QString& message);
@@ -71,7 +76,8 @@ signals:
     void closeClicked();
     void volumeChanged(int percent);
     void muteToggled();
-    void seekRequested(double seconds);
+    void seekRequested(double seconds, bool exact);
+    void speedBoostRequested(bool active);
     void thumbnailRequested(double seconds);
 
 protected:

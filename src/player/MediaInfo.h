@@ -29,6 +29,29 @@ struct TrackInfo {
     }
 };
 
+struct ChapterInfo {
+    int id{0};
+    QString title;
+    double time{0.0};
+};
+
+struct StreamStats {
+    QString fileFormat;
+    QString videoCodec;
+    int width{0};
+    int height{0};
+    int displayWidth{0};
+    int displayHeight{0};
+    double fps{0.0};
+    double videoBitrate{0.0}; // in kbps
+    QString hwdec;
+    int dropCount{0};
+    QString audioCodec;
+    int audioChannels{0};
+    int audioSampleRate{0};
+    double audioBitrate{0.0}; // in kbps
+};
+
 struct MediaInfo {
     QString filePath;
     QString fileName;
@@ -46,6 +69,7 @@ struct MediaInfo {
     std::vector<TrackInfo> audioTracks;
     std::vector<TrackInfo> videoTracks;
     std::vector<TrackInfo> subtitleTracks;
+    std::vector<ChapterInfo> chapters;
 
     bool hasVideo() const {
         return !isAudioOnly && width > 0 && height > 0;

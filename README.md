@@ -27,7 +27,16 @@ During normal playback, there is practically no interface chrome—no traditiona
   - **Resume Playback Position**: Automatically remembers playback progress per file and resumes with an OSD notification.
   - **Smart Folder Navigation**: Natural alphanumeric folder traversal (`Episode 1` -> `Episode 2` -> `Episode 10`) via `]` / `PageDown` and `[` / `PageUp`.
   - **Auto-Advance on EOF**: Automatically loads and plays the next episode or file in the folder when current media ends.
+  - **Chapter Markers & Jumping**: Embedded chapters render as subtle tick marks on the timeline groove; jump between chapters using `Shift + ]` and `Shift + [`.
+  - **Hold-to-Speed (2.0x Boost)**: Hold `C` or hold the Fast-Forward button to temporarily boost playback to 2.0x with pitch correction, instantly resuming 1.0x on release.
   - **External Subtitles**: Automatic fuzzy discovery for subtitles in the same directory, plus instant drag-and-drop support for `.srt`, `.vtt`, `.ass`, `.sub`, `.idx`.
+  - **Subtitle Timing Sync**: Adjust subtitle delay on the fly using `Z` (-100ms) and `X` (+100ms).
+- **Picture-in-Picture (PiP) Snap**:
+  - Shortcut `P` instantly docks and scales the window into an always-on-top mini player snapped to the bottom-right corner.
+- **Stream & Codec Inspector**:
+  - Shortcut `I` toggles a high-tech translucent HUD displaying video codec, resolution, display FPS, bitrate, hardware decoder, dropped frames, and audio layout.
+- **Built-in Help & Shortcuts Guide**:
+  - Access "Help & Shortcuts..." from the right-click menu anytime to open an in-app visual guide and reference modal.
 - **Audio Enhancements**:
   - **Quiet Dialogue Boost / Dynaudnorm**: Toggle dynamic audio normalization (`N` key or context menu) to boost quiet speech and soften loud explosions without clipping.
 - **Instant Clean Frame Capture**:
@@ -77,6 +86,7 @@ During normal playback, there is practically no interface chrome—no traditiona
 | Shortcut | Action |
 |---|---|
 | `Space` | Play / Pause |
+| `C` (Hold) | 2.0x Quick Speed Boost (release to restore 1.0x) |
 | `1` | Original size (100% video resolution) |
 | `2` | Half size (50% video resolution) |
 | `4` | Quarter size (25% video resolution) |
@@ -88,6 +98,12 @@ During normal playback, there is practically no interface chrome—no traditiona
 | `Down Arrow` | Decrease volume (-5%) |
 | `]` / `PageDown` | Play next media file in folder |
 | `[` / `PageUp` | Play previous media file in folder |
+| `Shift + ]` | Next chapter |
+| `Shift + [` | Previous chapter |
+| `Z` | Subtitle delay -100ms |
+| `X` | Subtitle delay +100ms |
+| `P` | Toggle Picture-in-Picture mode |
+| `I` | Toggle Stream & Codec Inspector HUD |
 | `S` | Instant clean screenshot (copied to clipboard & saved to Desktop) |
 | `Shift + S` | Screenshot with subtitles (copied to clipboard & saved to Desktop) |
 | `N` | Toggle Quiet Dialogue Boost (dynaudnorm) |

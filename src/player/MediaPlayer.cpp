@@ -28,6 +28,9 @@ MediaPlayer::MediaPlayer(QObject* parent)
     connect(m_controller.get(), &MpvController::tracksChanged, this, &MediaPlayer::tracksChanged);
     connect(m_controller.get(), &MpvController::screenshotTaken, this, &MediaPlayer::screenshotTaken);
     connect(m_controller.get(), &MpvController::subtitleAdded, this, &MediaPlayer::subtitleAdded);
+    connect(m_controller.get(), &MpvController::subtitleDelayChanged, this, &MediaPlayer::subtitleDelayChanged);
+    connect(m_controller.get(), &MpvController::chaptersChanged, this, &MediaPlayer::chaptersChanged);
+    connect(m_controller.get(), &MpvController::chapterChanged, this, &MediaPlayer::chapterChanged);
 }
 
 bool MediaPlayer::initialize() {
@@ -77,8 +80,24 @@ void MediaPlayer::seekRelative(double seconds) {
     m_controller->seekRelative(seconds);
 }
 
-void MediaPlayer::seekAbsolute(double seconds) {
-    m_controller->seekAbsolute(seconds);
+void MediaPlayer::seekAbsolute(double seconds, bool exact) {
+    m_controller->seekAbsolute(seconds, exact);
+}
+
+void MediaPlayer::setSubtitleDelay(double seconds) {
+    m_controller->setSubtitleDelay(seconds);
+}
+
+void MediaPlayer::adjustSubtitleDelay(double deltaSeconds) {
+    m_controller->adjustSubtitleDelay(deltaSeconds);
+}
+
+void MediaPlayer::nextChapter() {
+    m_controller->nextChapter();
+}
+
+void MediaPlayer::previousChapter() {
+    m_controller->previousChapter();
 }
 
 void MediaPlayer::setVolume(int volumePercent) {

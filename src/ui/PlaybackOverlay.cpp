@@ -4,6 +4,7 @@
 #include <QIcon>
 #include <QMouseEvent>
 #include <QDateTime>
+#include <QPainter>
 #include <algorithm>
 #include <cmath>
 
@@ -65,6 +66,31 @@ double TimelineSlider::ratioFromEvent(QMouseEvent* event) const {
     return std::clamp(static_cast<double>(event->pos().x()) / width(), 0.0, 1.0);
 }
 
+void TimelineSlider::setChapters(const std::vector<ChapterInfo>& chapters) {
+    m_chapters = chapters;
+    update();
+}
+
+void TimelineSlider::paintEvent(QPaintEvent* event) {
+    QSlider::paintEvent(event);
+
+    if (m_duration <= 0.0 || m_chapters.empty()) return;
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    const int grooveY = height() / 2;
+    const int tickHeight = 6;
+    const int tickTop = grooveY - (tickHeight / 2);
+
+    for (const auto& ch : m_chapters) {
+        if (ch.time <= 0.0 || ch.time >= m_duration) continue;
+        double ratio = ch.time / m_duration;
+        int x = static_cast<int>(ratio * width());
+        painter.fillRect(x - 1, tickTop, 2, tickHeight, QColor(255, 255, 255, 175));
+    }
+}
+
 void TimelineSlider::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         m_dragging = true;
@@ -73,7 +99,7 @@ void TimelineSlider::mousePressEvent(QMouseEvent* event) {
         double targetSec = ratio * m_duration;
         emit hoverMoved(targetSec, event->pos().x());
         emit draggingPositionChanged(targetSec);
-        emit seekRequested(targetSec);
+        emit seekRequested(targetSec, false);
         event->accept();
         return;
     }
@@ -89,12 +115,11 @@ void TimelineSlider::mouseMoveEvent(QMouseEvent* event) {
         setValue(static_cast<int>(ratio * 10000));
         emit draggingPositionChanged(targetSec);
 
-        // Throttle seek commands during rapid dragging to at most every 35ms (~30Hz)
-        // to prevent flooding the mpv decoder pipeline
+        // Instant keyframe seeking during dragging
         qint64 now = QDateTime::currentMSecsSinceEpoch();
-        if (now - m_lastSeekDispatchMs >= 35) {
+        if (now - m_lastSeekDispatchMs >= 25) {
             m_lastSeekDispatchMs = now;
-            emit seekRequested(targetSec);
+            emit seekRequested(targetSec, false);
         }
         event->accept();
         return;
@@ -107,7 +132,7 @@ void TimelineSlider::mouseReleaseEvent(QMouseEvent* event) {
         m_dragging = false;
         double ratio = ratioFromEvent(event);
         setValue(static_cast<int>(ratio * 10000));
-        emit seekRequested(ratio * m_duration);
+        emit seekRequested(ratio * m_duration, true);
         if (!rect().contains(event->pos())) {
             emit hoverLeft();
         }
@@ -263,6 +288,12 @@ void PlaybackOverlay::setupUi() {
     m_seekFwdBtn->setIconSize(QSize(20, 20));
     m_seekFwdBtn->setStyleSheet(buttonStyle.arg(20));
     connect(m_seekFwdBtn, &QPushButton::clicked, this, &PlaybackOverlay::seekForwardClicked);
+    connect(m_seekFwdBtn, &QPushButton::pressed, this, [this]() {
+        emit speedBoostRequested(true);
+    });
+    connect(m_seekFwdBtn, &QPushButton::released, this, [this]() {
+        emit speedBoostRequested(false);
+    });
 
     centerLayout->addWidget(m_seekBackBtn);
     centerLayout->addWidget(m_playPauseBtn);
@@ -295,6 +326,10 @@ void PlaybackOverlay::setDuration(double seconds) {
     m_duration = seconds;
     m_timelineSlider->setDuration(seconds);
     updateTimeLabel();
+}
+
+void PlaybackOverlay::setChapters(const std::vector<ChapterInfo>& chapters) {
+    m_timelineSlider->setChapters(chapters);
 }
 
 void PlaybackOverlay::toggleTimeMode() {

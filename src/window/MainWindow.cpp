@@ -2,6 +2,8 @@
 #include "config/SettingsManager.h"
 #include "formats/FormatRegistry.h"
 #include "ui/FileAssociationDialog.h"
+#include "ui/MediaInspectorOverlay.h"
+#include "ui/HelpDialog.h"
 #include <QApplication>
 #include <QScreen>
 #include <QMouseEvent>
@@ -34,9 +36,11 @@ MainWindow::MainWindow(QWidget* parent)
     , m_renderer(new VideoRenderer(this))
     , m_overlay(new PlaybackOverlay(this))
     , m_contextMenu(new ContextMenu(this))
+    , m_inspector(new MediaInspectorOverlay(this))
     , m_osdTimer(new QTimer(this))
     , m_scrollResetTimer(new QTimer(this))
-    , m_rightClickHoldTimer(new QTimer(this)) {
+    , m_rightClickHoldTimer(new QTimer(this))
+    , m_inspectorTimer(new QTimer(this)) {
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -66,6 +70,11 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_overlay, &PlaybackOverlay::muteToggled, m_player.get(), &MediaPlayer::toggleMute);
     connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
     connect(m_overlay, &PlaybackOverlay::thumbnailRequested, this, &MainWindow::onThumbnailRequested);
+    connect(m_overlay, &PlaybackOverlay::speedBoostRequested, this, [this](bool active) {
+        m_speedBoostActive = active;
+        m_player->setSpeed(active ? 2.0 : 1.0);
+        m_overlay->showOsd(active ? QStringLiteral("Speed 2.0x") : QStringLiteral("Speed 1.0x"));
+    });
 
     if (m_thumbnailWorker) {
         connect(m_thumbnailWorker.get(), &ThumbnailWorker::thumbnailReady, this, &MainWindow::onThumbnailReady);
@@ -83,11 +92,16 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::mediaEnded, this, &MainWindow::onMediaEnded);
     connect(m_player.get(), &MediaPlayer::errorOccurred, this, &MainWindow::onErrorOccurred);
     connect(m_player.get(), &MediaPlayer::screenshotTaken, this, &MainWindow::onScreenshotTaken);
+    connect(m_player.get(), &MediaPlayer::chaptersChanged, this, &MainWindow::onChaptersChanged);
+    connect(m_player.get(), &MediaPlayer::chapterChanged, this, &MainWindow::onChapterChanged);
 
     // Context menu connections
     connect(m_contextMenu, &ContextMenu::playPauseTriggered, m_player.get(), &MediaPlayer::togglePlayPause);
     connect(m_contextMenu, &ContextMenu::alwaysOnTopToggled, this, &MainWindow::setAlwaysOnTop);
     connect(m_contextMenu, &ContextMenu::fullscreenToggled, this, &MainWindow::toggleFullscreen);
+    connect(m_contextMenu, &ContextMenu::pipToggled, this, &MainWindow::togglePictureInPicture);
+    connect(m_contextMenu, &ContextMenu::inspectorToggled, this, &MainWindow::toggleMediaInspector);
+    connect(m_contextMenu, &ContextMenu::helpTriggered, this, &MainWindow::showHelpDialog);
     connect(m_contextMenu, &ContextMenu::reverseTrackpadToggled, this, [](bool rev) {
         SettingsManager::instance().setReverseTrackpadScrubbing(rev);
         SettingsManager::instance().save();
@@ -129,6 +143,14 @@ MainWindow::MainWindow(QWidget* parent)
     m_scrollResetTimer->setInterval(250);
     connect(m_scrollResetTimer, &QTimer::timeout, this, [this]() {
         m_accumulatedScrollX = 0;
+    });
+
+    // Inspector refresh timer (500ms)
+    m_inspectorTimer->setInterval(500);
+    connect(m_inspectorTimer, &QTimer::timeout, this, [this]() {
+        if (m_inspector && m_inspector->isVisible()) {
+            m_inspector->updateStats(m_player->streamStats());
+        }
     });
 }
 
@@ -382,6 +404,64 @@ void MainWindow::playPreviousInFolder() {
         openFile(prevFile);
         m_overlay->showOsd(QStringLiteral("Prev: %1").arg(QFileInfo(prevFile).fileName()));
     }
+}
+
+void MainWindow::onChaptersChanged(const std::vector<ChapterInfo>& chapters) {
+    m_overlay->setChapters(chapters);
+}
+
+void MainWindow::onChapterChanged(int index, const QString& title) {
+    m_overlay->showOsd(QStringLiteral("Chapter %1/%2: %3")
+        .arg(index + 1)
+        .arg(m_player->chapterCount())
+        .arg(title));
+}
+
+void MainWindow::togglePictureInPicture() {
+    if (m_isPiP) {
+        m_isPiP = false;
+        if (m_prePiPGeometry.isValid()) {
+            setGeometry(m_prePiPGeometry);
+        }
+        setAlwaysOnTop(m_prePiPAlwaysOnTop);
+        m_overlay->showOsd(QStringLiteral("Exit Picture-in-Picture"));
+    } else {
+        m_prePiPGeometry = geometry();
+        m_prePiPAlwaysOnTop = m_isAlwaysOnTop;
+        m_isPiP = true;
+
+        double dar = m_aspectManager.aspectRatio();
+        int pipW = 380;
+        int pipH = static_cast<int>(std::round(pipW / dar));
+
+        QScreen* scr = screen();
+        if (!scr) scr = QGuiApplication::primaryScreen();
+        QRect scrRect = scr ? scr->availableGeometry() : QRect(0, 0, 1920, 1080);
+
+        int targetX = scrRect.right() - pipW - 20;
+        int targetY = scrRect.bottom() - pipH - 20;
+
+        setGeometry(targetX, targetY, pipW, pipH);
+        setAlwaysOnTop(true);
+        m_overlay->showOsd(QStringLiteral("Picture-in-Picture"));
+    }
+}
+
+void MainWindow::toggleMediaInspector() {
+    if (!m_inspector) return;
+    m_inspector->toggleInspector();
+    if (m_inspector->isVisible()) {
+        m_inspector->move(20, 50);
+        m_inspector->updateStats(m_player->streamStats());
+        m_inspectorTimer->start();
+    } else {
+        m_inspectorTimer->stop();
+    }
+}
+
+void MainWindow::showHelpDialog() {
+    HelpDialog dlg(this);
+    dlg.exec();
 }
 
 void MainWindow::setAlwaysOnTop(bool top) {
@@ -837,13 +917,42 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_4:
         applyWindowScale(0.25);
         break;
+    case Qt::Key_C:
+        if (!event->isAutoRepeat()) {
+            m_speedBoostActive = true;
+            m_player->setSpeed(2.0);
+            m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
+        }
+        break;
+    case Qt::Key_Z:
+        m_player->adjustSubtitleDelay(-0.1);
+        m_overlay->showOsd(QStringLiteral("Sub Delay: %1ms").arg(static_cast<int>(std::round(m_player->subtitleDelay() * 1000))));
+        break;
+    case Qt::Key_X:
+        m_player->adjustSubtitleDelay(0.1);
+        m_overlay->showOsd(QStringLiteral("Sub Delay: %1ms").arg(static_cast<int>(std::round(m_player->subtitleDelay() * 1000))));
+        break;
+    case Qt::Key_P:
+        togglePictureInPicture();
+        break;
+    case Qt::Key_I:
+        toggleMediaInspector();
+        break;
     case Qt::Key_BracketRight:
     case Qt::Key_PageDown:
-        playNextInFolder();
+        if (event->modifiers() & Qt::ShiftModifier) {
+            m_player->nextChapter();
+        } else {
+            playNextInFolder();
+        }
         break;
     case Qt::Key_BracketLeft:
     case Qt::Key_PageUp:
-        playPreviousInFolder();
+        if (event->modifiers() & Qt::ShiftModifier) {
+            m_player->previousChapter();
+        } else {
+            playPreviousInFolder();
+        }
         break;
     case Qt::Key_S:
         if (event->modifiers() & Qt::ShiftModifier) {
@@ -914,6 +1023,16 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     }
     m_overlay->showOverlay();
     m_osdTimer->start(5000);
+}
+
+void MainWindow::keyReleaseEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_C && !event->isAutoRepeat()) {
+        m_speedBoostActive = false;
+        m_player->setSpeed(1.0);
+        m_overlay->showOsd(QStringLiteral("Speed 1.0x"));
+        return;
+    }
+    QWidget::keyReleaseEvent(event);
 }
 
 void MainWindow::showFileAssociationsDialog() {

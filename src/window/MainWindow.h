@@ -46,6 +46,7 @@ protected:
 
     // Keyboard shortcuts
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
 
 #ifdef _WIN32
     bool nativeEvent(const QByteArray& eventType, void* message, qintptr* result) override;
@@ -70,6 +71,11 @@ private slots:
     void playNextInFolder();
     void playPreviousInFolder();
     void toggleDialogueBoost();
+    void togglePictureInPicture();
+    void toggleMediaInspector();
+    void showHelpDialog();
+    void onChaptersChanged(const std::vector<ChapterInfo>& chapters);
+    void onChapterChanged(int index, const QString& title);
 
     void toggleFullscreen();
     void setAlwaysOnTop(bool top);
@@ -95,11 +101,14 @@ private:
     VideoRenderer* m_renderer{nullptr};
     PlaybackOverlay* m_overlay{nullptr};
     ContextMenu* m_contextMenu{nullptr};
+    class MediaInspectorOverlay* m_inspector{nullptr};
 
     QTimer* m_osdTimer{nullptr};
     QTimer* m_scrollResetTimer{nullptr};
     QTimer* m_rightClickHoldTimer{nullptr};
+    QTimer* m_inspectorTimer{nullptr};
     QRect m_normalGeometry;
+    QRect m_prePiPGeometry;
     QPoint m_pressPos;
     QPoint m_rightPressPos;
     QPoint m_rightPressGlobalPos;
@@ -111,6 +120,9 @@ private:
     bool m_draggingWindow{false};
     bool m_isFullscreen{false};
     bool m_isAlwaysOnTop{false};
+    bool m_isPiP{false};
+    bool m_prePiPAlwaysOnTop{false};
+    bool m_speedBoostActive{false};
     const int m_borderMargin{16};
     const int m_cornerMargin{32};
 };

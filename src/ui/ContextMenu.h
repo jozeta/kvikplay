@@ -33,6 +33,9 @@ signals:
     void recentFileSelected(const QString& filePath);
     void clearRecentTriggered();
     void screenshotTriggered();
+    void pipToggled();
+    void inspectorToggled();
+    void helpTriggered();
     void aboutTriggered();
     void closeTriggered();
     void audioTrackSelected(int id);
@@ -51,8 +54,11 @@ private:
 
     QAction* m_dialogueBoostAction{nullptr};
     QAction* m_screenshotAction{nullptr};
+    QAction* m_pipAction{nullptr};
+    QAction* m_inspectorAction{nullptr};
     QAction* m_reverseTrackpadAction{nullptr};
     QAction* m_fileAssocAction{nullptr};
+    QAction* m_helpAction{nullptr};
     QAction* m_aboutAction{nullptr};
     QAction* m_closeAction{nullptr};
 };

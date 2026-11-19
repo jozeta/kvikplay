@@ -125,9 +125,27 @@ int main(int argc, char* argv[]) {
     player.setDialogueBoost(true);
     player.setDialogueBoost(false);
 
-    // Test Subtitle addition
-    std::cout << "[TestPlayback] Testing Subtitle addition..." << std::endl;
+    // Test Subtitle addition & delay sync
+    std::cout << "[TestPlayback] Testing Subtitle addition & delay..." << std::endl;
     player.addSubtitleTrack(findTestMedia(QStringLiteral("test_media/test_sub.srt")));
+    player.setSubtitleDelay(0.15);
+    assert(std::abs(player.subtitleDelay() - 0.15) < 0.01);
+    player.adjustSubtitleDelay(-0.05);
+    assert(std::abs(player.subtitleDelay() - 0.10) < 0.01);
+
+    // Test Keyframe Seeking & Speed
+    std::cout << "[TestPlayback] Testing Keyframe Seeking & Speed..." << std::endl;
+    player.seekAbsolute(1.5, false); // keyframe seek
+    player.seekAbsolute(2.0, true);  // exact seek
+    player.setSpeed(2.0);
+    assert(player.speed() == 2.0);
+    player.setSpeed(1.0);
+    assert(player.speed() == 1.0);
+
+    // Test Stream Stats
+    std::cout << "[TestPlayback] Testing Stream Stats..." << std::endl;
+    auto stats = player.streamStats();
+    assert(stats.width > 0 || stats.fps >= 0.0);
 
     // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;

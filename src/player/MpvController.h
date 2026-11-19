@@ -28,7 +28,7 @@ public:
     void stop();
 
     void seekRelative(double seconds);
-    void seekAbsolute(double seconds);
+    void seekAbsolute(double seconds, bool exact = true);
 
     void setVolume(int percent);
     void adjustVolume(int deltaPercent);
@@ -36,6 +36,22 @@ public:
     void toggleMute();
 
     void setSpeed(double speed);
+    double speed() const { return m_speed; }
+
+    // Subtitle delay
+    double subtitleDelay() const { return m_subtitleDelay; }
+    void setSubtitleDelay(double seconds);
+    void adjustSubtitleDelay(double deltaSeconds);
+
+    // Chapter controls
+    void nextChapter();
+    void previousChapter();
+    int currentChapter() const { return m_currentChapter; }
+    int chapterCount() const { return static_cast<int>(m_mediaInfo.chapters.size()); }
+    QString currentChapterTitle() const;
+
+    // Technical stats
+    StreamStats streamStats() const;
 
     // Track controls
     void setAudioTrack(int id);
@@ -73,6 +89,9 @@ signals:
     void tracksChanged(const std::vector<TrackInfo>& audio, const std::vector<TrackInfo>& video, const std::vector<TrackInfo>& sub);
     void screenshotTaken(const QString& filePath);
     void subtitleAdded(const QString& fileName);
+    void subtitleDelayChanged(double seconds);
+    void chaptersChanged(const std::vector<ChapterInfo>& chapters);
+    void chapterChanged(int chapterIndex, const QString& title);
 
 private slots:
     void processMpvEvents();
@@ -83,6 +102,7 @@ private:
     void handlePropertyChange(mpv_event_property* prop);
     void updateVideoParams();
     void updateTracks();
+    void updateChapters();
 
     mpv_handle* m_mpv{nullptr};
     PlaybackState m_state{PlaybackState::Idle};
@@ -93,6 +113,8 @@ private:
     bool m_isMuted{false};
     double m_speed{1.0};
     bool m_isPaused{false};
+    double m_subtitleDelay{0.0};
+    int m_currentChapter{0};
     std::atomic<bool> m_wakeupPending{false};
 };
 

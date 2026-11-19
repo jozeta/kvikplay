@@ -28,13 +28,29 @@ public:
     void stop();
 
     void seekRelative(double seconds);
-    void seekAbsolute(double seconds);
+    void seekAbsolute(double seconds, bool exact = true);
 
     void setVolume(int volumePercent);
     void adjustVolume(int deltaPercent);
     void toggleMute();
 
     void setSpeed(double speed);
+    double speed() const { return m_controller ? m_controller->speed() : 1.0; }
+
+    // Subtitle delay
+    double subtitleDelay() const { return m_controller ? m_controller->subtitleDelay() : 0.0; }
+    void setSubtitleDelay(double seconds);
+    void adjustSubtitleDelay(double deltaSeconds);
+
+    // Chapters
+    void nextChapter();
+    void previousChapter();
+    int currentChapter() const { return m_controller ? m_controller->currentChapter() : 0; }
+    int chapterCount() const { return m_controller ? m_controller->chapterCount() : 0; }
+    QString currentChapterTitle() const { return m_controller ? m_controller->currentChapterTitle() : QString(); }
+
+    // Stream Stats
+    StreamStats streamStats() const { return m_controller ? m_controller->streamStats() : StreamStats{}; }
 
     // Track controls
     void setAudioTrack(int id);
@@ -72,6 +88,9 @@ signals:
     void tracksChanged(const std::vector<TrackInfo>& audio, const std::vector<TrackInfo>& video, const std::vector<TrackInfo>& sub);
     void screenshotTaken(const QString& filePath);
     void subtitleAdded(const QString& fileName);
+    void subtitleDelayChanged(double seconds);
+    void chaptersChanged(const std::vector<ChapterInfo>& chapters);
+    void chapterChanged(int chapterIndex, const QString& title);
 
 private:
     std::unique_ptr<MpvController> m_controller;
