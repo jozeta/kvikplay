@@ -145,13 +145,13 @@ if(APPLE)
 
     add_executable(generate_icon packaging/macos/generate_icon.cpp)
     target_link_libraries(generate_icon PRIVATE Qt6::Core Qt6::Gui Qt6::Svg)
-
-    add_custom_target(standalone_bundle
-        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_macos.sh "${CMAKE_CURRENT_BINARY_DIR}/kvikplay.app"
-        DEPENDS kvikplay
-        COMMENT "Bundling all dependencies to create a standalone portable macOS app"
-    )
 elseif(WIN32)
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/app.rc.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/app.rc"
+        @ONLY
+    )
+    target_sources(kvikplay PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
     target_link_libraries(kvikplay PRIVATE
         dwmapi
         shell32
@@ -159,6 +159,58 @@ elseif(WIN32)
 endif()
 
 qt_finalize_executable(kvikplay)
+
+# Standalone Deployment Automation
+option(KVIKPLAY_STANDALONE "Automatically bundle all dependencies into a standalone app on build" ON)
+
+if(KVIKPLAY_STANDALONE)
+    if(APPLE)
+        find_program(MACDEPLOYQT_EXECUTABLE macdeployqt
+            HINTS
+            "/opt/homebrew/opt/qtbase/bin"
+            "/opt/homebrew/bin"
+            "/usr/local/opt/qtbase/bin"
+            "/usr/local/bin"
+        )
+        if(MACDEPLOYQT_EXECUTABLE)
+            add_custom_command(TARGET kvikplay POST_BUILD
+                COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_macos.sh" "$<TARGET_BUNDLE_DIR:kvikplay>" "${MACDEPLOYQT_EXECUTABLE}"
+                COMMENT "Bundling dependencies to create a 100% standalone portable macOS app"
+                VERBATIM
+            )
+        else()
+            message(WARNING "macdeployqt not found. Skipping automatic standalone packaging.")
+        endif()
+    elseif(WIN32)
+        get_target_property(_qt_moc_loc Qt6::moc IMPORTED_LOCATION)
+        get_filename_component(_qt_bin_dir "${_qt_moc_loc}" DIRECTORY)
+        find_program(WINDEPLOYQT_EXECUTABLE windeployqt
+            HINTS
+            "${_qt_bin_dir}"
+            "$ENV{QTDIR}/bin"
+        )
+
+        set(MPV_DLL_HINT "")
+        if(TARGET PkgConfig::MPV)
+            get_target_property(_mpv_lib_dirs PkgConfig::MPV INTERFACE_LINK_DIRECTORIES)
+            if(_mpv_lib_dirs)
+                list(GET _mpv_lib_dirs 0 MPV_DLL_HINT)
+            endif()
+        endif()
+
+        add_custom_command(TARGET kvikplay POST_BUILD
+            COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/scripts/package_windows.bat" "$<TARGET_FILE:kvikplay>" "${WINDEPLOYQT_EXECUTABLE}" "${MPV_DLL_HINT}"
+            COMMENT "Bundling dependencies to create a 100% standalone portable Windows app"
+            VERBATIM
+        )
+    endif()
+endif()
+
+# Standalone bundle target alias
+add_custom_target(standalone_bundle
+    DEPENDS kvikplay
+    COMMENT "Standalone bundle generated automatically with kvikplay target"
+)
 
 # Unit Testing
 enable_testing()

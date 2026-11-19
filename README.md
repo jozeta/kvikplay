@@ -172,24 +172,35 @@ brew install cmake pkg-config mpv qtbase qtsvg
 - Qt 6.5+ (MSVC 2022 64-bit)
 - libmpv development build (DLL and headers)
 
-### Compilation
+### Compilation & Standalone Deployment
+
+Kvikplay is configured to **always build as a 100% self-contained standalone application** automatically whenever you build the target. Zero extra packaging commands are needed.
 
 ```bash
 # Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 
-# Build
+# Build (automatically bundles all Qt and MPV dependencies post-build)
 cmake --build build -j8
 
 # Run Unit Tests
 ctest --test-dir build --output-on-failure
 ```
 
+- **macOS**: Every standard build automatically executes `macdeployqt`, bundles all 50+ media frameworks (`libmpv`, `ffmpeg`, Qt), rewrites all dynamic library paths to relative `@executable_path/../Frameworks`, fixes internal rpaths, and applies ad-hoc code signing. The resulting `build/kvikplay.app` can be copied to any Mac and run immediately without needing Homebrew or any external dependencies installed.
+- **Windows**: Every standard build automatically executes `windeployqt` and packages `mpv-2.dll`, Qt libraries, plugins, and the C++ runtime directly into the output directory with `kvikplay.exe`. The entire folder can be distributed or moved to any Windows machine.
+- To disable standalone deployment during rapid incremental debugging, configure with `-DKVIKPLAY_STANDALONE=OFF`.
+
 ### Running
 
 ```bash
 # macOS
+open build/kvikplay.app
+# Or directly from terminal:
 ./build/kvikplay.app/Contents/MacOS/kvikplay [optional_media_file]
+
+# Windows
+.\build\kvikplay.exe [optional_media_file]
 
 # Or drag and drop any supported media file directly into the player window.
 ```
