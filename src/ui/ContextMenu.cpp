@@ -65,11 +65,6 @@ ContextMenu::ContextMenu(QWidget* parent)
     m_reverseTrackpadAction->setCheckable(true);
     connect(m_reverseTrackpadAction, &QAction::toggled, this, &ContextMenu::reverseTrackpadToggled);
 
-    m_clickToPlayPauseAction = addAction(QStringLiteral("Click Window to Play/Pause"));
-    m_clickToPlayPauseAction->setCheckable(true);
-    m_clickToPlayPauseAction->setChecked(true);
-    connect(m_clickToPlayPauseAction, &QAction::toggled, this, &ContextMenu::clickToPlayPauseToggled);
-
     addSeparator();
 
     m_fileAssocAction = addAction(QStringLiteral("File Associations..."), this, &ContextMenu::fileAssociationsTriggered);
@@ -95,10 +90,6 @@ void ContextMenu::setFullscreen(bool fullscreen) {
 
 void ContextMenu::setReverseTrackpad(bool reversed) {
     m_reverseTrackpadAction->setChecked(reversed);
-}
-
-void ContextMenu::setClickToPlayPause(bool enabled) {
-    m_clickToPlayPauseAction->setChecked(enabled);
 }
 
 void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,

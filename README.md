@@ -24,16 +24,17 @@ During normal playback, there is practically no interface chrome—no traditiona
   - Audio-only mode with a clean, neutral slate graphic rather than a broken screen.
   - Multi-track support: Audio, Video, and Subtitle selection submenus in the context menu (automatically greyed out if no additional tracks exist).
 - **Fluid Mouse & Trackpad Interactions**:
-  - **Single Click**: Toggle Play / Pause anywhere on the video (when window is focused; can be disabled via context menu).
+  - **Single Click**: Toggle Play / Pause anywhere on the video (when window is focused).
   - **Click on Unfocused Window**: Brings the window into focus without accidentally pausing/playing.
   - **Double Click**: Toggles between fullscreen and windowed mode, remembering the windowed dimensions.
+  - **Right-Click Hold (> 0.5s)**: Holding the right mouse button for longer than 0.5s opens the minimalist context menu (prevents accidental popups).
   - **Trackpad Two-Finger Scrubbing**: Drag right to scrub forward, drag left to scrub backward (option in context menu to reverse direction).
   - **Click and Drag**: Move the frameless window.
   - **Generous Resize Zones**: 32px corner zones and 16px border zones make resizing effortless.
   - **Mouse Wheel**: Seek forwards/backwards 10s.
   - **Shift + Mouse Wheel**: Seek forwards/backwards 30s.
   - **Ctrl + Mouse Wheel**: Volume adjustment in 5% increments.
-  - **Right-Click**: Minimalist context menu with track selectors, reverse trackpad scrubbing, click-to-play-pause toggle, Always on Top, Fullscreen, and Settings.
+  - **Context Menu**: Minimalist context menu with track selectors, reverse trackpad scrubbing, Always on Top, Fullscreen, and Settings.
   - **Hover & Inactivity**: Displays the OSD as soon as the mouse hovers over the window; hides OSD after 5s of mouse inactivity and restores it instantly on movement.
 - **Transparent Frosted OSD**:
   - Highly transparent, frosted glass styling with zero black background.
@@ -82,13 +83,13 @@ During normal playback, there is practically no interface chrome—no traditiona
 
 | Action | Result |
 |---|---|
-| `Single Click` | Toggle Play / Pause (when focused; optional setting) |
+| `Single Click` | Toggle Play / Pause (when focused) |
 | `Double Click` | Toggle Fullscreen / Windowed (restores windowed size) |
+| `Right Click Hold (> 0.5s)` | Open Context Menu |
 | `Two-Finger Trackpad Scrub` | Drag right/left to seek forward/backward (reversable) |
 | `Scroll Up / Down` | Seek forward / backward 10s |
 | `Shift + Scroll Up / Down` | Seek forward / backward 30s |
 | `Ctrl + Scroll Up / Down` | Increase / decrease volume by 5% |
-| `Right Click` | Open Context Menu |
 | `Drag Window Area` | Move frameless window |
 | `Drag 4 Corners / Edges` | Resize window (32px corner zones, 16px edge zones) |
 | `Hover Window` | Reveal overlay controls (auto-hides after 5s stillness) |

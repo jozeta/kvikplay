@@ -424,4 +424,9 @@ void PlaybackOverlay::wheelEvent(QWheelEvent* event) {
     QWidget::wheelEvent(event);
 }
 
+void PlaybackOverlay::contextMenuEvent(QContextMenuEvent* event) {
+    // Consume context menu event so the menu only appears on a 0.5s right-click hold
+    event->accept();
+}
+
 } // namespace kvikplay

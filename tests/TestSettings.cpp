@@ -25,9 +25,6 @@ int main(int argc, char* argv[]) {
     settings.setReverseTrackpadScrubbing(true);
     assert(settings.reverseTrackpadScrubbing() == true);
 
-    settings.setClickToPlayPause(false);
-    assert(settings.clickToPlayPause() == false);
-
     QStringList exts = {QStringLiteral(".mp4"), QStringLiteral(".mkv")};
     settings.setAssociatedExtensions(exts);
     assert(settings.associatedExtensions().size() == 2);
@@ -41,11 +38,9 @@ int main(int argc, char* argv[]) {
     assert(settings.alwaysOnTop() == true);
     assert(settings.windowSize() == QSize(1280, 720));
     assert(settings.reverseTrackpadScrubbing() == true);
-    assert(settings.clickToPlayPause() == false);
 
     // Reset back to defaults
     settings.setReverseTrackpadScrubbing(false);
-    settings.setClickToPlayPause(true);
     settings.save();
 
     std::cout << "[TestSettings] All tests passed!" << std::endl;

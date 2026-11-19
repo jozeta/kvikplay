@@ -69,6 +69,7 @@ private slots:
     void showFileAssociationsDialog();
     void showAboutDialog();
     void onOsdInactivityTimeout();
+    void onRightClickHoldTimeout();
     void applyWindowScale(double scale);
 
 private:
@@ -87,8 +88,11 @@ private:
     QTimer* m_osdTimer{nullptr};
     QTimer* m_scrollResetTimer{nullptr};
     QTimer* m_singleClickTimer{nullptr};
+    QTimer* m_rightClickHoldTimer{nullptr};
     QRect m_normalGeometry;
     QPoint m_pressPos;
+    QPoint m_rightPressPos;
+    QPoint m_rightPressGlobalPos;
     int m_accumulatedScrollX{0};
     qint64 m_lastActivationTime{0};
     bool m_activatedByMouseClick{false};

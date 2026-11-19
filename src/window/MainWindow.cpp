@@ -32,7 +32,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_contextMenu(new ContextMenu(this))
     , m_osdTimer(new QTimer(this))
     , m_scrollResetTimer(new QTimer(this))
-    , m_singleClickTimer(new QTimer(this)) {
+    , m_singleClickTimer(new QTimer(this))
+    , m_rightClickHoldTimer(new QTimer(this)) {
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -82,10 +83,6 @@ MainWindow::MainWindow(QWidget* parent)
         SettingsManager::instance().setReverseTrackpadScrubbing(rev);
         SettingsManager::instance().save();
     });
-    connect(m_contextMenu, &ContextMenu::clickToPlayPauseToggled, this, [](bool en) {
-        SettingsManager::instance().setClickToPlayPause(en);
-        SettingsManager::instance().save();
-    });
     connect(m_contextMenu, &ContextMenu::fileAssociationsTriggered, this, &MainWindow::showFileAssociationsDialog);
     connect(m_contextMenu, &ContextMenu::aboutTriggered, this, &MainWindow::showAboutDialog);
     connect(m_contextMenu, &ContextMenu::closeTriggered, this, &QWidget::close);
@@ -101,9 +98,19 @@ MainWindow::MainWindow(QWidget* parent)
     // Single-click play/pause timer (distinguishes single-click from double-click fullscreen)
     m_singleClickTimer->setSingleShot(true);
     connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
-        if (SettingsManager::instance().clickToPlayPause()) {
-            m_player->togglePlayPause();
-        }
+        m_player->togglePlayPause();
+    });
+
+    // Right-click hold timer (right click menu appears if held for longer than 0.5s)
+    m_rightClickHoldTimer->setSingleShot(true);
+    m_rightClickHoldTimer->setInterval(500);
+    connect(m_rightClickHoldTimer, &QTimer::timeout, this, &MainWindow::onRightClickHoldTimeout);
+
+    // Trackpad scroll accumulator reset timer
+    m_scrollResetTimer->setSingleShot(true);
+    m_scrollResetTimer->setInterval(250);
+    connect(m_scrollResetTimer, &QTimer::timeout, this, [this]() {
+        m_accumulatedScrollX = 0;
     });
 
     // Trackpad scroll accumulator reset timer
@@ -157,7 +164,6 @@ bool MainWindow::initialize() {
     m_overlay->setVolume(settings.volume());
     m_overlay->setMuted(settings.isMuted());
     m_contextMenu->setReverseTrackpad(settings.reverseTrackpadScrubbing());
-    m_contextMenu->setClickToPlayPause(settings.clickToPlayPause());
 
     // Native platform window setup
     if (m_platform) {
@@ -337,6 +343,11 @@ void MainWindow::onOsdInactivityTimeout() {
     }
 }
 
+void MainWindow::onRightClickHoldTimeout() {
+    m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
+    m_contextMenu->exec(m_rightPressGlobalPos);
+}
+
 void MainWindow::updateRendererGeometry() {
     if (m_isFullscreen) {
         // Center video preserving aspect ratio on fullscreen black canvas
@@ -443,7 +454,16 @@ void MainWindow::updateCursorForEdges(Qt::Edges edges) {
 }
 
 void MainWindow::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::RightButton) {
+        m_rightPressPos = event->pos();
+        m_rightPressGlobalPos = event->globalPosition().toPoint();
+        m_rightClickHoldTimer->start(500); // 0.5s hold required for context menu
+        event->accept();
+        return;
+    }
+
     if (event->button() == Qt::LeftButton) {
+        m_rightClickHoldTimer->stop();
         // Record focus state at the exact moment of mouse click
         qint64 now = QDateTime::currentMSecsSinceEpoch();
         bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
@@ -480,6 +500,13 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
     // Reset 5s inactivity timer
     m_osdTimer->start(5000);
 
+    // If right mouse button was pressed, check for drag movement to cancel context menu hold
+    if ((event->buttons() & Qt::RightButton) && m_rightClickHoldTimer->isActive()) {
+        if ((event->pos() - m_rightPressPos).manhattanLength() > 6) {
+            m_rightClickHoldTimer->stop();
+        }
+    }
+
     if (!m_isFullscreen) {
         Qt::Edges edges = hitTestEdges(event->pos());
         updateCursorForEdges(edges);
@@ -500,6 +527,12 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::RightButton) {
+        m_rightClickHoldTimer->stop(); // Released before 0.5s -> do not show menu
+        event->accept();
+        return;
+    }
+
     if (event->button() == Qt::LeftButton) {
         if (m_ignoreNextRelease) {
             m_ignoreNextRelease = false;
@@ -512,12 +545,10 @@ void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
         bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
         m_activatedByMouseClick = false;
 
-        // Only toggle play/pause if window was already active/in focus when clicked AND click-to-play-pause is enabled
+        // Only toggle play/pause if window was already active/in focus when clicked
         if (m_wasActiveOnPress && !wasJustActivated && !m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
-            if (SettingsManager::instance().clickToPlayPause()) {
-                // Delay slightly to distinguish single click from double click
-                m_singleClickTimer->start(200);
-            }
+            // Delay slightly to distinguish single click from double click
+            m_singleClickTimer->start(200);
             event->accept();
             return;
         }
@@ -595,9 +626,11 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent* event) {
-    m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
-    m_contextMenu->setClickToPlayPause(SettingsManager::instance().clickToPlayPause());
-    m_contextMenu->exec(event->globalPos());
+    if (event->reason() == QContextMenuEvent::Keyboard) {
+        m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
+        m_contextMenu->exec(event->globalPos());
+    }
+    event->accept();
 }
 
 void MainWindow::enterEvent(QEnterEvent* /*event*/) {

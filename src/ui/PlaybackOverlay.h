@@ -74,6 +74,7 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private slots:
     void toggleTimeMode();
