@@ -88,6 +88,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::muteChanged, this, &MainWindow::onMuteChanged);
     connect(m_player.get(), &MediaPlayer::positionChanged, this, &MainWindow::onPositionChanged);
     connect(m_player.get(), &MediaPlayer::durationChanged, this, &MainWindow::onDurationChanged);
+    connect(m_player.get(), &MediaPlayer::speedChanged, this, [this](double) {
+        updateNowPlayingMetadata();
+    });
     connect(m_player.get(), &MediaPlayer::tracksChanged, this, &MainWindow::onTracksChanged);
     connect(m_player.get(), &MediaPlayer::mediaEnded, this, &MainWindow::onMediaEnded);
     connect(m_player.get(), &MediaPlayer::errorOccurred, this, &MainWindow::onErrorOccurred);
@@ -155,6 +158,10 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    if (m_platform) {
+        m_platform->setDisplaySleepInhibited(false);
+        m_platform->clearNowPlayingInfo();
+    }
     if (m_thumbnailWorker) {
         m_thumbnailWorker->stop();
         m_thumbnailWorker.reset();
@@ -218,6 +225,39 @@ bool MainWindow::initialize() {
                 m_activatedByMouseClick = true;
             }
         });
+
+        MediaKeyCallbacks callbacks;
+        callbacks.onPlay = [this]() {
+            QMetaObject::invokeMethod(this, [this]() {
+                m_player->play();
+            }, Qt::QueuedConnection);
+        };
+        callbacks.onPause = [this]() {
+            QMetaObject::invokeMethod(this, [this]() {
+                m_player->pause();
+            }, Qt::QueuedConnection);
+        };
+        callbacks.onTogglePlayPause = [this]() {
+            QMetaObject::invokeMethod(this, [this]() {
+                m_player->togglePlayPause();
+            }, Qt::QueuedConnection);
+        };
+        callbacks.onNextTrack = [this]() {
+            QMetaObject::invokeMethod(this, [this]() {
+                playNextInFolder();
+            }, Qt::QueuedConnection);
+        };
+        callbacks.onPreviousTrack = [this]() {
+            QMetaObject::invokeMethod(this, [this]() {
+                playPreviousInFolder();
+            }, Qt::QueuedConnection);
+        };
+        callbacks.onSeek = [this](double seconds) {
+            QMetaObject::invokeMethod(this, [this, seconds]() {
+                m_player->seekAbsolute(seconds, true);
+            }, Qt::QueuedConnection);
+        };
+        m_platform->setupMediaKeyCommands(callbacks);
     }
 
     return true;
@@ -286,6 +326,10 @@ void MainWindow::onMediaLoaded(const MediaInfo& info) {
             .arg(s, 2, 10, QChar('0')));
     }
 
+    m_lastNowPlayingPosition = -1.0;
+    m_lastNowPlayingSyncTimeMs = 0;
+    updateNowPlayingMetadata();
+
     updateRendererGeometry();
 }
 
@@ -299,6 +343,11 @@ void MainWindow::onPlaybackStateChanged(PlaybackState state) {
     bool isPlaying = (state == PlaybackState::Playing);
     m_overlay->setPlaying(isPlaying);
     m_contextMenu->setPlaying(isPlaying);
+
+    if (m_platform) {
+        m_platform->setDisplaySleepInhibited(isPlaying);
+    }
+    updateNowPlayingMetadata();
 }
 
 void MainWindow::onVolumeChanged(int percent) {
@@ -312,13 +361,29 @@ void MainWindow::onMuteChanged(bool muted) {
 
 void MainWindow::onPositionChanged(double seconds) {
     m_overlay->setPosition(seconds);
+
+    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    bool isDiscontinuous = (m_lastNowPlayingPosition >= 0.0) && (std::abs(seconds - m_lastNowPlayingPosition) > 2.0);
+    bool periodicTimeout = (nowMs - m_lastNowPlayingSyncTimeMs > 5000);
+
+    if (m_lastNowPlayingPosition < 0.0 || isDiscontinuous || periodicTimeout) {
+        m_lastNowPlayingPosition = seconds;
+        m_lastNowPlayingSyncTimeMs = nowMs;
+        updateNowPlayingMetadata();
+    }
 }
 
 void MainWindow::onDurationChanged(double seconds) {
     m_overlay->setDuration(seconds);
+    updateNowPlayingMetadata();
 }
 
 void MainWindow::onMediaEnded() {
+    if (m_platform) {
+        m_platform->setDisplaySleepInhibited(false);
+    }
+    updateNowPlayingMetadata();
+
     SettingsManager::instance().clearResumePosition(m_currentFilePath);
     SettingsManager::instance().save();
     m_overlay->setPlaying(false);
@@ -664,6 +729,10 @@ void MainWindow::changeEvent(QEvent* event) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    if (m_platform) {
+        m_platform->setDisplaySleepInhibited(false);
+        m_platform->clearNowPlayingInfo();
+    }
     if (!m_currentFilePath.isEmpty() && m_player->hasMedia()) {
         double curPos = m_player->position();
         double dur = m_player->duration();
@@ -1181,5 +1250,19 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
     return QWidget::nativeEvent(eventType, message, result);
 }
 #endif
+
+void MainWindow::updateNowPlayingMetadata() {
+    if (!m_platform) return;
+    if (!m_player || !m_player->hasMedia()) {
+        m_platform->clearNowPlayingInfo();
+        return;
+    }
+    NowPlayingInfo info;
+    info.title = m_player->mediaInfo().title.isEmpty() ? m_player->mediaInfo().fileName : m_player->mediaInfo().title;
+    info.duration = m_player->duration();
+    info.position = m_player->position();
+    info.playbackRate = (m_player->state() == PlaybackState::Playing) ? m_player->speed() : 0.0;
+    m_platform->setNowPlayingInfo(info);
+}
 
 } // namespace kvikplay

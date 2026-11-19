@@ -91,6 +91,7 @@ private:
     void updateRendererGeometry();
     void fitAndPositionWindow(const QSize& targetSize, const QPoint& preferredCenter);
     QStringList getFolderMediaFiles() const;
+    void updateNowPlayingMetadata();
 
     std::unique_ptr<MediaPlayer> m_player;
     std::unique_ptr<PlatformIntegration> m_platform;
@@ -124,6 +125,8 @@ private:
     bool m_isPiP{false};
     bool m_prePiPAlwaysOnTop{false};
     bool m_speedBoostActive{false};
+    double m_lastNowPlayingPosition{-1.0};
+    qint64 m_lastNowPlayingSyncTimeMs{0};
     const int m_borderMargin{16};
     const int m_cornerMargin{32};
 };

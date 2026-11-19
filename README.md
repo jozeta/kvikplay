@@ -37,6 +37,13 @@ During normal playback, there is practically no interface chrome—no traditiona
   - Shortcut `I` toggles a high-tech translucent HUD displaying video codec, resolution, display FPS, bitrate, hardware decoder, dropped frames, and audio layout.
 - **Built-in Help & Shortcuts Guide**:
   - Access "Help & Shortcuts..." from the right-click menu anytime to open an in-app visual guide and reference modal.
+- **macOS Now Playing & System Media Keys Integration**:
+  - Seamless native macOS Control Center, Menu Bar, and Lock Screen integration via `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`.
+  - Displays media title, duration, elapsed position, and playback rate in system media widgets.
+  - Hardware keyboard media keys and headphone/touchpad controls (Play, Pause, Next Track, Previous Track, Scrubbing) work globally even when Kvikplay is running in the background.
+- **Sleep & Screen-Saver Inhibit (Caffeine Mode)**:
+  - Automatically inhibits system sleep and screensaver display dimming while media is actively playing using native OS power assertions (`IOPMAssertionCreateWithName` on macOS, `SetThreadExecutionState` on Windows).
+  - Automatically releases power assertions as soon as playback pauses, media ends, or the window closes.
 - **Audio Enhancements**:
   - **Quiet Dialogue Boost / Dynaudnorm**: Toggle dynamic audio normalization (`N` key or context menu) to boost quiet speech and soften loud explosions without clipping.
 - **Instant Clean Frame Capture**:

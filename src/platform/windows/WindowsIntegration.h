@@ -16,6 +16,8 @@ public:
     bool registerFileAssociations(const QStringList& extensions) override;
     void openSystemDefaultAppsSettings() override;
 
+    void setDisplaySleepInhibited(bool inhibit) override;
+
     static double currentAspectRatio();
     static void setGlobalAspectRatio(double ratio);
 

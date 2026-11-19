@@ -85,16 +85,18 @@ if(APPLE)
     set(CMAKE_OBJCXX_STANDARD 20)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
-    list(APPEND KVIKPLAY_SOURCES
+    set(PLATFORM_SOURCES
         src/platform/macos/MacOSIntegration.h
         src/platform/macos/MacOSIntegration.mm
     )
 elseif(WIN32)
-    list(APPEND KVIKPLAY_SOURCES
+    set(PLATFORM_SOURCES
         src/platform/windows/WindowsIntegration.h
         src/platform/windows/WindowsIntegration.cpp
     )
 endif()
+
+list(APPEND KVIKPLAY_SOURCES ${PLATFORM_SOURCES})
 
 qt_add_executable(kvikplay
     MANUAL_FINALIZATION
@@ -116,10 +118,14 @@ if(APPLE)
     find_library(COCOA_LIBRARY Cocoa REQUIRED)
     find_library(CORESERVICES_LIBRARY CoreServices REQUIRED)
     find_library(OPENGL_LIBRARY OpenGL REQUIRED)
+    find_library(IOKIT_LIBRARY IOKit REQUIRED)
+    find_library(MEDIAPLAYER_LIBRARY MediaPlayer REQUIRED)
     target_link_libraries(kvikplay PRIVATE
         ${COCOA_LIBRARY}
         ${CORESERVICES_LIBRARY}
         ${OPENGL_LIBRARY}
+        ${IOKIT_LIBRARY}
+        ${MEDIAPLAYER_LIBRARY}
     )
 
     set_target_properties(kvikplay PROPERTIES
@@ -183,3 +189,21 @@ add_executable(test_playback
 target_include_directories(test_playback PRIVATE src)
 target_link_libraries(test_playback PRIVATE Qt6::Core PkgConfig::MPV)
 add_test(NAME test_playback COMMAND test_playback)
+
+add_executable(test_platform
+    tests/TestPlatform.cpp
+    src/platform/PlatformIntegration.h
+    src/platform/PlatformIntegration.cpp
+    ${PLATFORM_SOURCES}
+)
+target_include_directories(test_platform PRIVATE src)
+target_link_libraries(test_platform PRIVATE Qt6::Widgets)
+if(APPLE)
+    target_link_libraries(test_platform PRIVATE
+        ${COCOA_LIBRARY}
+        ${CORESERVICES_LIBRARY}
+        ${IOKIT_LIBRARY}
+        ${MEDIAPLAYER_LIBRARY}
+    )
+endif()
+add_test(NAME test_platform COMMAND test_platform)

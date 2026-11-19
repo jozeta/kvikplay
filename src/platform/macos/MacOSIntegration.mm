@@ -9,11 +9,33 @@
 #import <Cocoa/Cocoa.h>
 #import <CoreServices/CoreServices.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <IOKit/pwr_mgt/IOPMLib.h>
+#import <MediaPlayer/MediaPlayer.h>
 
 namespace kvikplay {
 
 MacOSIntegration::MacOSIntegration() = default;
-MacOSIntegration::~MacOSIntegration() = default;
+
+MacOSIntegration::~MacOSIntegration() {
+    if (m_sleepAssertionId != 0) {
+        IOPMAssertionRelease(m_sleepAssertionId);
+        m_sleepAssertionId = 0;
+    }
+    [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
+    MPRemoteCommandCenter* commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+    [commandCenter.playCommand removeTarget:nil];
+    commandCenter.playCommand.enabled = NO;
+    [commandCenter.pauseCommand removeTarget:nil];
+    commandCenter.pauseCommand.enabled = NO;
+    [commandCenter.togglePlayPauseCommand removeTarget:nil];
+    commandCenter.togglePlayPauseCommand.enabled = NO;
+    [commandCenter.nextTrackCommand removeTarget:nil];
+    commandCenter.nextTrackCommand.enabled = NO;
+    [commandCenter.previousTrackCommand removeTarget:nil];
+    commandCenter.previousTrackCommand.enabled = NO;
+    [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+    commandCenter.changePlaybackPositionCommand.enabled = NO;
+}
 
 void MacOSIntegration::setupFramelessWindow(QWidget* widget) {
     if (!widget) return;
@@ -148,6 +170,111 @@ void MacOSIntegration::installActivationObserver(QWidget* widget, std::function<
             callback(byMouse);
         }
     }];
+}
+
+void MacOSIntegration::setDisplaySleepInhibited(bool inhibit) {
+    if (inhibit) {
+        if (m_sleepAssertionId == 0) {
+            CFStringRef reason = CFSTR("Kvikplay Media Playback");
+            IOPMAssertionID assertion = 0;
+            IOReturn ret = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypePreventUserIdleDisplaySleep,
+                kIOPMAssertionLevelOn,
+                reason,
+                &assertion
+            );
+            if (ret == kIOReturnSuccess) {
+                m_sleepAssertionId = assertion;
+            }
+        }
+    } else {
+        if (m_sleepAssertionId != 0) {
+            IOPMAssertionRelease(m_sleepAssertionId);
+            m_sleepAssertionId = 0;
+        }
+    }
+}
+
+void MacOSIntegration::setNowPlayingInfo(const NowPlayingInfo& info) {
+    MPNowPlayingInfoCenter* center = [MPNowPlayingInfoCenter defaultCenter];
+    if (info.title.isEmpty() && info.duration <= 0.0) {
+        center.nowPlayingInfo = nil;
+        return;
+    }
+
+    NSMutableDictionary* dict = [NSMutableDictionary dictionary];
+    dict[MPMediaItemPropertyTitle] = info.title.toNSString();
+    if (!info.artist.isEmpty()) {
+        dict[MPMediaItemPropertyArtist] = info.artist.toNSString();
+    }
+    if (info.duration > 0.0) {
+        dict[MPMediaItemPropertyPlaybackDuration] = @(info.duration);
+    }
+    dict[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(std::max(0.0, info.position));
+    dict[MPNowPlayingInfoPropertyPlaybackRate] = @(info.playbackRate);
+
+    center.nowPlayingInfo = dict;
+}
+
+void MacOSIntegration::clearNowPlayingInfo() {
+    [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
+}
+
+void MacOSIntegration::setupMediaKeyCommands(const MediaKeyCallbacks& callbacks) {
+    m_mediaCallbacks = callbacks;
+    MPRemoteCommandCenter* commandCenter = [MPRemoteCommandCenter sharedCommandCenter];
+
+    auto onPlay = callbacks.onPlay;
+    [commandCenter.playCommand removeTarget:nil];
+    [commandCenter.playCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* /*event*/) {
+        if (onPlay) onPlay();
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    commandCenter.playCommand.enabled = YES;
+
+    auto onPause = callbacks.onPause;
+    [commandCenter.pauseCommand removeTarget:nil];
+    [commandCenter.pauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* /*event*/) {
+        if (onPause) onPause();
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    commandCenter.pauseCommand.enabled = YES;
+
+    auto onTogglePlayPause = callbacks.onTogglePlayPause;
+    [commandCenter.togglePlayPauseCommand removeTarget:nil];
+    [commandCenter.togglePlayPauseCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* /*event*/) {
+        if (onTogglePlayPause) onTogglePlayPause();
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    commandCenter.togglePlayPauseCommand.enabled = YES;
+
+    auto onNextTrack = callbacks.onNextTrack;
+    [commandCenter.nextTrackCommand removeTarget:nil];
+    [commandCenter.nextTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* /*event*/) {
+        if (onNextTrack) onNextTrack();
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    commandCenter.nextTrackCommand.enabled = YES;
+
+    auto onPreviousTrack = callbacks.onPreviousTrack;
+    [commandCenter.previousTrackCommand removeTarget:nil];
+    [commandCenter.previousTrackCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* /*event*/) {
+        if (onPreviousTrack) onPreviousTrack();
+        return MPRemoteCommandHandlerStatusSuccess;
+    }];
+    commandCenter.previousTrackCommand.enabled = YES;
+
+    auto onSeek = callbacks.onSeek;
+    [commandCenter.changePlaybackPositionCommand removeTarget:nil];
+    [commandCenter.changePlaybackPositionCommand addTargetWithHandler:^MPRemoteCommandHandlerStatus(MPRemoteCommandEvent* event) {
+        if (onSeek && [event isKindOfClass:[MPChangePlaybackPositionCommandEvent class]]) {
+            MPChangePlaybackPositionCommandEvent* posEvent = (MPChangePlaybackPositionCommandEvent*)event;
+            onSeek(posEvent.positionTime);
+            return MPRemoteCommandHandlerStatusSuccess;
+        }
+        return MPRemoteCommandHandlerStatusCommandFailed;
+    }];
+    commandCenter.changePlaybackPositionCommand.enabled = YES;
 }
 
 } // namespace kvikplay

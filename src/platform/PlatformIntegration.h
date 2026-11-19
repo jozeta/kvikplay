@@ -10,6 +10,23 @@ class QWidget;
 
 namespace kvikplay {
 
+struct NowPlayingInfo {
+    QString title;
+    QString artist;
+    double duration{0.0};
+    double position{0.0};
+    double playbackRate{1.0};
+};
+
+struct MediaKeyCallbacks {
+    std::function<void()> onPlay;
+    std::function<void()> onPause;
+    std::function<void()> onTogglePlayPause;
+    std::function<void()> onNextTrack;
+    std::function<void()> onPreviousTrack;
+    std::function<void(double seconds)> onSeek;
+};
+
 class PlatformIntegration {
 public:
     virtual ~PlatformIntegration() = default;
@@ -26,6 +43,14 @@ public:
         (void)widget;
         (void)callback;
     }
+
+    // Power & Sleep management
+    virtual void setDisplaySleepInhibited(bool inhibit) { (void)inhibit; }
+
+    // System Media Transport & Now Playing
+    virtual void setNowPlayingInfo(const NowPlayingInfo& info) { (void)info; }
+    virtual void clearNowPlayingInfo() {}
+    virtual void setupMediaKeyCommands(const MediaKeyCallbacks& callbacks) { (void)callbacks; }
 };
 
 } // namespace kvikplay

@@ -177,4 +177,16 @@ void WindowsIntegration::openSystemDefaultAppsSettings() {
     QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:defaultapps")));
 }
 
+void WindowsIntegration::setDisplaySleepInhibited(bool inhibit) {
+#ifdef _WIN32
+    if (inhibit) {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+    } else {
+        SetThreadExecutionState(ES_CONTINUOUS);
+    }
+#else
+    Q_UNUSED(inhibit);
+#endif
+}
+
 } // namespace kvikplay
