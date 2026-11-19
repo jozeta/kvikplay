@@ -24,12 +24,12 @@ During normal playback, there is practically no interface chrome—no traditiona
   - Audio-only mode with a clean, neutral slate graphic rather than a broken screen.
   - Multi-track support: Audio, Video, and Subtitle selection submenus in the context menu (automatically greyed out if no additional tracks exist).
 - **Fluid Mouse & Trackpad Interactions**:
-  - **Single Click**: Toggle Play / Pause anywhere on the video (when window is focused).
+  - **Right Click / Trackpad Two-Finger Click**: Quick tap/click toggles Play / Pause anywhere on the video (when window is focused).
+  - **Right Click / Trackpad Two-Finger Hold (> 0.5s)**: Holding for longer than 0.5s opens the minimalist context menu.
   - **Click on Unfocused Window**: Brings the window into focus without accidentally pausing/playing.
-  - **Double Click**: Toggles between fullscreen and windowed mode, remembering the windowed dimensions.
-  - **Right-Click Hold (> 0.5s)**: Holding the right mouse button for longer than 0.5s opens the minimalist context menu (prevents accidental popups).
+  - **Left Click and Drag**: Moves the frameless window smoothly across desktops.
+  - **Double Left Click**: Toggles between fullscreen and windowed mode, remembering the windowed dimensions.
   - **Trackpad Two-Finger Scrubbing**: Drag right to scrub forward, drag left to scrub backward (option in context menu to reverse direction).
-  - **Click and Drag**: Move the frameless window.
   - **Generous Resize Zones**: 32px corner zones and 16px border zones make resizing effortless.
   - **Mouse Wheel**: Seek forwards/backwards 10s.
   - **Shift + Mouse Wheel**: Seek forwards/backwards 30s.
@@ -62,7 +62,7 @@ During normal playback, there is practically no interface chrome—no traditiona
 
 | Shortcut | Action |
 |---|---|
-| `Space` / `Click` | Play / Pause |
+| `Space` | Play / Pause |
 | `1` | Original size (100% video resolution) |
 | `2` | Half size (50% video resolution) |
 | `4` | Quarter size (25% video resolution) |
@@ -79,19 +79,19 @@ During normal playback, there is practically no interface chrome—no traditiona
 
 ---
 
-## Mouse Interactions
+## Mouse & Trackpad Interactions
 
 | Action | Result |
 |---|---|
-| `Single Click` | Toggle Play / Pause (when focused) |
-| `Double Click` | Toggle Fullscreen / Windowed (restores windowed size) |
-| `Right Click Hold (> 0.5s)` | Open Context Menu |
+| `Right Click / Trackpad Two-Finger Click` | Toggle Play / Pause (when focused) |
+| `Right Click / Two-Finger Hold (> 0.5s)` | Open Context Menu |
+| `Double Left Click` | Toggle Fullscreen / Windowed (restores windowed size) |
+| `Left Click + Drag` | Move frameless window |
+| `Drag 4 Corners / Edges` | Resize window (32px corner zones, 16px edge zones) |
 | `Two-Finger Trackpad Scrub` | Drag right/left to seek forward/backward (reversable) |
 | `Scroll Up / Down` | Seek forward / backward 10s |
 | `Shift + Scroll Up / Down` | Seek forward / backward 30s |
 | `Ctrl + Scroll Up / Down` | Increase / decrease volume by 5% |
-| `Drag Window Area` | Move frameless window |
-| `Drag 4 Corners / Edges` | Resize window (32px corner zones, 16px edge zones) |
 | `Hover Window` | Reveal overlay controls (auto-hides after 5s stillness) |
 | `Drag and Drop File` | Open video or audio file and start playback immediately |
 

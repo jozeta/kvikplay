@@ -32,7 +32,6 @@ MainWindow::MainWindow(QWidget* parent)
     , m_contextMenu(new ContextMenu(this))
     , m_osdTimer(new QTimer(this))
     , m_scrollResetTimer(new QTimer(this))
-    , m_singleClickTimer(new QTimer(this))
     , m_rightClickHoldTimer(new QTimer(this)) {
 
     // Frameless window setup with transparency for rounded corners
@@ -95,23 +94,10 @@ MainWindow::MainWindow(QWidget* parent)
     m_osdTimer->setInterval(5000);
     connect(m_osdTimer, &QTimer::timeout, this, &MainWindow::onOsdInactivityTimeout);
 
-    // Single-click play/pause timer (distinguishes single-click from double-click fullscreen)
-    m_singleClickTimer->setSingleShot(true);
-    connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
-        m_player->togglePlayPause();
-    });
-
     // Right-click hold timer (right click menu appears if held for longer than 0.5s)
     m_rightClickHoldTimer->setSingleShot(true);
     m_rightClickHoldTimer->setInterval(500);
     connect(m_rightClickHoldTimer, &QTimer::timeout, this, &MainWindow::onRightClickHoldTimeout);
-
-    // Trackpad scroll accumulator reset timer
-    m_scrollResetTimer->setSingleShot(true);
-    m_scrollResetTimer->setInterval(250);
-    connect(m_scrollResetTimer, &QTimer::timeout, this, [this]() {
-        m_accumulatedScrollX = 0;
-    });
 
     // Trackpad scroll accumulator reset timer
     m_scrollResetTimer->setSingleShot(true);
@@ -344,6 +330,7 @@ void MainWindow::onOsdInactivityTimeout() {
 }
 
 void MainWindow::onRightClickHoldTimeout() {
+    m_rightClickMenuShown = true;
     m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
     m_contextMenu->exec(m_rightPressGlobalPos);
 }
@@ -455,8 +442,20 @@ void MainWindow::updateCursorForEdges(Qt::Edges edges) {
 
 void MainWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
+        // Record focus state at the exact moment of right click / two-finger click
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
+        m_wasActiveOnRightPress = isActiveWindow() && !wasJustActivated;
+
+        // If not in focus, bring window to front and don't trigger action
+        if (!m_wasActiveOnRightPress) {
+            activateWindow();
+            raise();
+        }
+
         m_rightPressPos = event->pos();
         m_rightPressGlobalPos = event->globalPosition().toPoint();
+        m_rightClickMenuShown = false;
         m_rightClickHoldTimer->start(500); // 0.5s hold required for context menu
         event->accept();
         return;
@@ -464,10 +463,6 @@ void MainWindow::mousePressEvent(QMouseEvent* event) {
 
     if (event->button() == Qt::LeftButton) {
         m_rightClickHoldTimer->stop();
-        // Record focus state at the exact moment of mouse click
-        qint64 now = QDateTime::currentMSecsSinceEpoch();
-        bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
-        m_wasActiveOnPress = isActiveWindow() && !wasJustActivated;
 
         Qt::Edges edges = hitTestEdges(event->pos());
         if (edges != Qt::Edges() && windowHandle()) {
@@ -479,8 +474,7 @@ void MainWindow::mousePressEvent(QMouseEvent* event) {
         m_pressPos = event->pos();
         m_draggingWindow = false;
 
-        // If not in focus, bring window to front and don't toggle playback
-        if (!m_wasActiveOnPress) {
+        if (!isActiveWindow()) {
             activateWindow();
             raise();
         }
@@ -515,7 +509,6 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
         if ((event->buttons() & Qt::LeftButton) && !m_draggingWindow) {
             if ((event->pos() - m_pressPos).manhattanLength() > 6) {
                 m_draggingWindow = true;
-                m_singleClickTimer->stop(); // Don't trigger click action if dragging
                 if (windowHandle()) {
                     windowHandle()->startSystemMove();
                 }
@@ -528,40 +521,37 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
 
 void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::RightButton) {
-        m_rightClickHoldTimer->stop(); // Released before 0.5s -> do not show menu
-        event->accept();
-        return;
-    }
-
-    if (event->button() == Qt::LeftButton) {
-        if (m_ignoreNextRelease) {
-            m_ignoreNextRelease = false;
-            m_activatedByMouseClick = false;
-            event->accept();
-            return;
-        }
+        bool holdTimerWasActive = m_rightClickHoldTimer->isActive();
+        m_rightClickHoldTimer->stop();
 
         qint64 now = QDateTime::currentMSecsSinceEpoch();
         bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
         m_activatedByMouseClick = false;
 
-        // Only toggle play/pause if window was already active/in focus when clicked
-        if (m_wasActiveOnPress && !wasJustActivated && !m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
-            // Delay slightly to distinguish single click from double click
-            m_singleClickTimer->start(200);
-            event->accept();
-            return;
+        // If right-click / two-finger click was released before 0.5s (timer was still running),
+        // the menu was not shown, window was already focused, and mouse didn't drag:
+        // TOGGLE PLAY / PAUSE!
+        if (holdTimerWasActive && !m_rightClickMenuShown && m_wasActiveOnRightPress && !wasJustActivated) {
+            if ((event->pos() - m_rightPressPos).manhattanLength() <= 6) {
+                m_player->togglePlayPause();
+            }
         }
+        m_rightClickMenuShown = false;
+        event->accept();
+        return;
+    }
+
+    if (event->button() == Qt::LeftButton) {
         m_draggingWindow = false;
+        event->accept();
+        return;
     }
     QWidget::mouseReleaseEvent(event);
 }
 
 void MainWindow::mouseDoubleClickEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        // Double-click toggles fullscreen <-> windowed mode, remembering window size
-        m_singleClickTimer->stop(); // Cancel single click play/pause
-        m_ignoreNextRelease = true; // Prevent the 2nd click release from firing play/pause
+        // Double left-click toggles fullscreen <-> windowed mode, remembering window size
         toggleFullscreen();
         event->accept();
         return;

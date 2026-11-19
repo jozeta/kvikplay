@@ -87,7 +87,6 @@ private:
 
     QTimer* m_osdTimer{nullptr};
     QTimer* m_scrollResetTimer{nullptr};
-    QTimer* m_singleClickTimer{nullptr};
     QTimer* m_rightClickHoldTimer{nullptr};
     QRect m_normalGeometry;
     QPoint m_pressPos;
@@ -96,8 +95,8 @@ private:
     int m_accumulatedScrollX{0};
     qint64 m_lastActivationTime{0};
     bool m_activatedByMouseClick{false};
-    bool m_ignoreNextRelease{false};
-    bool m_wasActiveOnPress{false};
+    bool m_wasActiveOnRightPress{false};
+    bool m_rightClickMenuShown{false};
     bool m_draggingWindow{false};
     bool m_isFullscreen{false};
     bool m_isAlwaysOnTop{false};
