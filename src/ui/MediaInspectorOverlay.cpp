@@ -31,25 +31,40 @@ MediaInspectorOverlay::MediaInspectorOverlay(QWidget* parent)
 }
 
 void MediaInspectorOverlay::updateStats(const StreamStats& stats) {
-    QString text;
-    text += QStringLiteral("<b>FORMAT</b>:  %1\n").arg(stats.fileFormat.isEmpty() ? QStringLiteral("-") : stats.fileFormat);
-    text += QStringLiteral("<b>VIDEO</b>:   %1 (%2x%3)\n")
-                .arg(stats.videoCodec.isEmpty() ? QStringLiteral("None") : stats.videoCodec)
-                .arg(stats.width)
-                .arg(stats.height);
-    text += QStringLiteral("<b>DISPLAY</b>: %1x%2 @ %3 fps\n")
-                .arg(stats.displayWidth)
-                .arg(stats.displayHeight)
-                .arg(stats.fps, 0, 'f', 2);
-    text += QStringLiteral("<b>BITRATE</b>: %1 kbps\n").arg(static_cast<int>(stats.videoBitrate));
-    text += QStringLiteral("<b>DECODER</b>: %1 (drops: %2)\n").arg(stats.hwdec).arg(stats.dropCount);
-    text += QStringLiteral("<b>AUDIO</b>:   %1 (%2 ch, %3 Hz, %4 kbps)")
-                .arg(stats.audioCodec.isEmpty() ? QStringLiteral("None") : stats.audioCodec)
-                .arg(stats.audioChannels)
-                .arg(stats.audioSampleRate)
-                .arg(static_cast<int>(stats.audioBitrate));
+    QString html = QStringLiteral("<table cellpadding='2' cellspacing='0' style='font-family: ui-monospace, Menlo, Consolas, Monaco, monospace; font-size: 11px;'>");
 
-    m_statsLabel->setText(text);
+    auto addRow = [&](const QString& label, const QString& val) {
+        html += QStringLiteral(
+            "<tr>"
+            "  <td style='color: #8b92a2; font-weight: 600; padding-right: 14px;'>%1:</td>"
+            "  <td style='color: #ffffff;'>%2</td>"
+            "</tr>"
+        ).arg(label, val);
+    };
+
+    addRow(QStringLiteral("Format"), stats.fileFormat.isEmpty() ? QStringLiteral("-") : stats.fileFormat);
+    addRow(QStringLiteral("Video Codec"), stats.videoCodec.isEmpty() ? QStringLiteral("None") : stats.videoCodec);
+    addRow(QStringLiteral("Native Resolution"), QStringLiteral("%1 × %2").arg(stats.width).arg(stats.height));
+    addRow(QStringLiteral("Display Size"), QStringLiteral("%1 × %2").arg(stats.displayWidth).arg(stats.displayHeight));
+    addRow(QStringLiteral("Frame Rate"), QStringLiteral("%1 fps").arg(stats.fps, 0, 'f', 2));
+    addRow(QStringLiteral("Video Bitrate"), QStringLiteral("%1 kbps").arg(static_cast<int>(stats.videoBitrate)));
+    addRow(QStringLiteral("HW Decoder"), stats.hwdec);
+    addRow(QStringLiteral("Dropped Frames"), QString::number(stats.dropCount));
+    addRow(QStringLiteral("Audio Codec"), stats.audioCodec.isEmpty() ? QStringLiteral("None") : stats.audioCodec);
+
+    QString chStr = QString::number(stats.audioChannels) + QStringLiteral(" ch");
+    if (stats.audioChannels == 1) chStr += QStringLiteral(" (Mono)");
+    else if (stats.audioChannels == 2) chStr += QStringLiteral(" (Stereo)");
+    else if (stats.audioChannels == 6) chStr += QStringLiteral(" (5.1)");
+    else if (stats.audioChannels == 8) chStr += QStringLiteral(" (7.1)");
+    addRow(QStringLiteral("Audio Channels"), chStr);
+
+    addRow(QStringLiteral("Sample Rate"), QStringLiteral("%1 Hz").arg(stats.audioSampleRate));
+    addRow(QStringLiteral("Audio Bitrate"), QStringLiteral("%1 kbps").arg(static_cast<int>(stats.audioBitrate)));
+
+    html += QStringLiteral("</table>");
+
+    m_statsLabel->setText(html);
     adjustSize();
 }
 
