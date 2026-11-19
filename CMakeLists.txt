@@ -51,6 +51,8 @@ set(KVIKPLAY_SOURCES
     src/player/MpvController.cpp
     src/player/MediaPlayer.h
     src/player/MediaPlayer.cpp
+    src/player/ThumbnailWorker.h
+    src/player/ThumbnailWorker.cpp
     src/rendering/VideoRenderer.h
     src/rendering/VideoRenderer.cpp
     src/window/AspectRatioManager.h
@@ -63,6 +65,8 @@ set(KVIKPLAY_SOURCES
     src/ui/VolumeControl.cpp
     src/ui/PlaybackOverlay.h
     src/ui/PlaybackOverlay.cpp
+    src/ui/TimelinePreviewCard.h
+    src/ui/TimelinePreviewCard.cpp
     src/ui/ContextMenu.h
     src/ui/ContextMenu.cpp
     src/ui/FileAssociationDialog.h

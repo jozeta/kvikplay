@@ -40,12 +40,18 @@ public:
     void setAudioTrack(int id);
     void setVideoTrack(int id);
     void setSubtitleTrack(int id);
+    void addSubtitleTrack(const QString& filePath);
+
+    // Screenshot and Audio enhancement
+    void takeScreenshot(bool includeSubtitles = false);
+    void setDialogueBoost(bool enabled);
 
     const std::vector<TrackInfo>& audioTracks() const { return m_controller->audioTracks(); }
     const std::vector<TrackInfo>& videoTracks() const { return m_controller->videoTracks(); }
     const std::vector<TrackInfo>& subtitleTracks() const { return m_controller->subtitleTracks(); }
 
     PlaybackState state() const { return m_controller->state(); }
+    bool hasMedia() const { return m_controller ? m_controller->hasMedia() : false; }
     const MediaInfo& mediaInfo() const { return m_controller->mediaInfo(); }
     double position() const { return m_controller->position(); }
     double duration() const { return m_controller->duration(); }
@@ -64,6 +70,8 @@ signals:
     void mediaEnded();
     void errorOccurred(const QString& error);
     void tracksChanged(const std::vector<TrackInfo>& audio, const std::vector<TrackInfo>& video, const std::vector<TrackInfo>& sub);
+    void screenshotTaken(const QString& filePath);
+    void subtitleAdded(const QString& fileName);
 
 private:
     std::unique_ptr<MpvController> m_controller;

@@ -1,6 +1,9 @@
 #include "MpvController.h"
 #include <QDebug>
 #include <QFileInfo>
+#include <QStandardPaths>
+#include <QDateTime>
+#include <QDir>
 #include <algorithm>
 #include <cmath>
 #include <clocale>
@@ -60,6 +63,15 @@ bool MpvController::initialize() {
 
     // Hardware decoding: try auto-safe (VideoToolbox on macOS, D3D11VA on Windows)
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
+
+    // HDR Tone-Mapping, Wide Gamut & Color Accuracy
+    mpv_set_option_string(m_mpv, "target-colorspace-hint", "yes");
+    mpv_set_option_string(m_mpv, "tone-mapping", "auto");
+    mpv_set_option_string(m_mpv, "gamut-clipping", "yes");
+    mpv_set_option_string(m_mpv, "hdr-compute-peak", "yes");
+
+    // Subtitle auto-loading matching files in same folder
+    mpv_set_option_string(m_mpv, "sub-auto", "fuzzy");
 
     // Position subtitles cleanly above the bottom controls area
     mpv_set_option_string(m_mpv, "sub-margin-y", "70");
@@ -414,6 +426,39 @@ void MpvController::setSpeed(double speed) {
     if (!m_mpv) return;
     double clamped = std::clamp(speed, 0.25, 4.0);
     mpv_set_property_async(m_mpv, 0, "speed", MPV_FORMAT_DOUBLE, &clamped);
+}
+
+void MpvController::takeScreenshot(bool includeSubtitles) {
+    if (!m_mpv) return;
+    QString desktopDir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+    if (desktopDir.isEmpty()) {
+        desktopDir = QDir::homePath();
+    }
+    QString timeStr = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss"));
+    QString filePath = QStringLiteral("%1/Kvikplay_%2.png").arg(desktopDir, timeStr);
+    QByteArray filePathUtf8 = filePath.toUtf8();
+    const char* mode = includeSubtitles ? "subtitles" : "video";
+    const char* cmd[] = {"screenshot-to-file", filePathUtf8.constData(), mode, nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+    emit screenshotTaken(filePath);
+}
+
+void MpvController::setDialogueBoost(bool enabled) {
+    if (!m_mpv) return;
+    if (enabled) {
+        mpv_set_property_string(m_mpv, "af", "dynaudnorm=f=75:g=25:p=0.55");
+    } else {
+        mpv_set_property_string(m_mpv, "af", "");
+    }
+}
+
+void MpvController::addSubtitleTrack(const QString& filePath) {
+    if (!m_mpv || filePath.isEmpty()) return;
+    QByteArray pathUtf8 = filePath.toUtf8();
+    const char* cmd[] = {"sub-add", pathUtf8.constData(), "select", nullptr};
+    mpv_command_async(m_mpv, 0, cmd);
+    QFileInfo fi(filePath);
+    emit subtitleAdded(fi.fileName());
 }
 
 } // namespace kvikplay

@@ -18,11 +18,25 @@ During normal playback, there is practically no interface chrome—no traditiona
   - Automatically constrains window geometry to preserve display aspect ratio (accounting for non-square pixel SAR and metadata).
   - Native 4-corner interactive resizing on both macOS (`NSWindow setAspectRatio:`, resizable borderless window) and Windows (`WM_SIZING` and `WM_NCHITTEST`).
   - Shortcuts `1`, `2`, `4` to jump to 100% original video size, 50% half size, and 25% quarter size.
-- **libmpv Hardware Accelerated Playback**:
-  - Renders directly into Qt 6 OpenGL surface (`QOpenGLWidget`) via the `mpv_render_context` OpenGL Render API.
-  - Automatic hardware decoding (`VideoToolbox` on macOS, `D3D11VA` on Windows).
-  - Audio-only mode with a clean, neutral slate graphic rather than a broken screen.
-  - Multi-track support: Audio, Video, and Subtitle selection submenus in the context menu (automatically greyed out if no additional tracks exist).
+- **libmpv High-Performance & HDR Rendering Pipeline**:
+  - Direct3D 11 hardware decoding on Windows (`d3d11va`) and `VideoToolbox` on macOS.
+  - Core Profile 3.3 zero-overhead rendering surface without depth/stencil buffers.
+  - High-precision HDR Tone-Mapping & Pass-Through (`target-colorspace-hint`, `hdr-compute-peak`, `tone-mapping=auto`).
+  - Audio pitch correction, low-latency seek hacks, and 128 MiB in-memory cache.
+- **Playback Intelligence & Navigation**:
+  - **Resume Playback Position**: Automatically remembers playback progress per file and resumes with an OSD notification.
+  - **Smart Folder Navigation**: Natural alphanumeric folder traversal (`Episode 1` -> `Episode 2` -> `Episode 10`) via `]` / `PageDown` and `[` / `PageUp`.
+  - **Auto-Advance on EOF**: Automatically loads and plays the next episode or file in the folder when current media ends.
+  - **External Subtitles**: Automatic fuzzy discovery for subtitles in the same directory, plus instant drag-and-drop support for `.srt`, `.vtt`, `.ass`, `.sub`, `.idx`.
+- **Audio Enhancements**:
+  - **Quiet Dialogue Boost / Dynaudnorm**: Toggle dynamic audio normalization (`N` key or context menu) to boost quiet speech and soften loud explosions without clipping.
+- **Instant Clean Frame Capture**:
+  - Shortcut `S` captures a pixel-perfect, clean video frame directly to Desktop and copies it to the system clipboard.
+  - Shortcut `Shift+S` captures the frame with rendered subtitles included.
+- **Interactive Timeline Hover Thumbnail Preview**:
+  - Hovering or dragging over the timeline displays a floating rounded preview card with real-time timestamp and decoded video keyframe thumbnail.
+- **Recent Files**:
+  - Context menu submenu with recent files list (up to 8 items, deduplicated) and clear action.
 - **Fluid Mouse & Trackpad Interactions**:
   - **Right Click / Trackpad Two-Finger Click**: Quick tap/click toggles Play / Pause anywhere on the video (when window is focused).
   - **Right Click / Trackpad Two-Finger Hold (> 0.5s)**: Holding for longer than 0.5s opens the minimalist context menu.
@@ -72,6 +86,11 @@ During normal playback, there is practically no interface chrome—no traditiona
 | `Shift + Right` | Seek forward 30 seconds |
 | `Up Arrow` | Increase volume (+5%) |
 | `Down Arrow` | Decrease volume (-5%) |
+| `]` / `PageDown` | Play next media file in folder |
+| `[` / `PageUp` | Play previous media file in folder |
+| `S` | Instant clean screenshot (copied to clipboard & saved to Desktop) |
+| `Shift + S` | Screenshot with subtitles (copied to clipboard & saved to Desktop) |
+| `N` | Toggle Quiet Dialogue Boost (dynaudnorm) |
 | `M` | Toggle mute / unmute |
 | `F` | Toggle fullscreen |
 | `Escape` | Exit fullscreen |

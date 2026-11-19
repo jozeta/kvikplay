@@ -17,6 +17,8 @@ public:
     void setAlwaysOnTop(bool onTop);
     void setFullscreen(bool fullscreen);
     void setReverseTrackpad(bool reversed);
+    void setDialogueBoost(bool enabled);
+    void setRecentFiles(const QStringList& files);
     void setTracks(const std::vector<TrackInfo>& audio,
                    const std::vector<TrackInfo>& video,
                    const std::vector<TrackInfo>& sub);
@@ -27,6 +29,10 @@ signals:
     void fileAssociationsTriggered();
     void fullscreenToggled();
     void reverseTrackpadToggled(bool reversed);
+    void dialogueBoostToggled(bool enabled);
+    void recentFileSelected(const QString& filePath);
+    void clearRecentTriggered();
+    void screenshotTriggered();
     void aboutTriggered();
     void closeTriggered();
     void audioTrackSelected(int id);
@@ -38,10 +44,13 @@ private:
     QAction* m_alwaysOnTopAction{nullptr};
     QAction* m_fullscreenAction{nullptr};
 
+    QMenu* m_recentMenu{nullptr};
     QMenu* m_audioMenu{nullptr};
     QMenu* m_videoMenu{nullptr};
     QMenu* m_subtitleMenu{nullptr};
 
+    QAction* m_dialogueBoostAction{nullptr};
+    QAction* m_screenshotAction{nullptr};
     QAction* m_reverseTrackpadAction{nullptr};
     QAction* m_fileAssocAction{nullptr};
     QAction* m_aboutAction{nullptr};

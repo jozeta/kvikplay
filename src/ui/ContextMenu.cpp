@@ -1,5 +1,6 @@
 #include "ContextMenu.h"
 #include <QActionGroup>
+#include <QFileInfo>
 
 namespace kvikplay {
 
@@ -40,6 +41,9 @@ ContextMenu::ContextMenu(QWidget* parent)
     m_playPauseAction = addAction(QStringLiteral("Play"), this, &ContextMenu::playPauseTriggered);
     m_playPauseAction->setShortcut(QKeySequence(Qt::Key_Space));
 
+    m_recentMenu = addMenu(QStringLiteral("Open Recent"));
+    m_recentMenu->setEnabled(false);
+
     m_alwaysOnTopAction = addAction(QStringLiteral("Always on Top"));
     m_alwaysOnTopAction->setCheckable(true);
     connect(m_alwaysOnTopAction, &QAction::toggled, this, &ContextMenu::alwaysOnTopToggled);
@@ -58,6 +62,16 @@ ContextMenu::ContextMenu(QWidget* parent)
 
     m_subtitleMenu = addMenu(QStringLiteral("Subtitles"));
     m_subtitleMenu->setEnabled(false);
+
+    addSeparator();
+
+    m_dialogueBoostAction = addAction(QStringLiteral("Quiet Dialogue Boost"));
+    m_dialogueBoostAction->setCheckable(true);
+    m_dialogueBoostAction->setShortcut(QKeySequence(Qt::Key_N));
+    connect(m_dialogueBoostAction, &QAction::toggled, this, &ContextMenu::dialogueBoostToggled);
+
+    m_screenshotAction = addAction(QStringLiteral("Take Screenshot"), this, &ContextMenu::screenshotTriggered);
+    m_screenshotAction->setShortcut(QKeySequence(Qt::Key_S));
 
     addSeparator();
 
@@ -90,6 +104,38 @@ void ContextMenu::setFullscreen(bool fullscreen) {
 
 void ContextMenu::setReverseTrackpad(bool reversed) {
     m_reverseTrackpadAction->setChecked(reversed);
+}
+
+void ContextMenu::setDialogueBoost(bool enabled) {
+    if (m_dialogueBoostAction) {
+        m_dialogueBoostAction->setChecked(enabled);
+    }
+}
+
+void ContextMenu::setRecentFiles(const QStringList& files) {
+    m_recentMenu->clear();
+    if (files.isEmpty()) {
+        m_recentMenu->setEnabled(false);
+        return;
+    }
+
+    m_recentMenu->setEnabled(true);
+    for (const auto& filePath : files) {
+        QFileInfo fi(filePath);
+        QString display = fi.fileName();
+        if (display.isEmpty()) {
+            display = filePath;
+        }
+        auto* act = m_recentMenu->addAction(display);
+        act->setToolTip(filePath);
+        connect(act, &QAction::triggered, this, [this, filePath]() {
+            emit recentFileSelected(filePath);
+        });
+    }
+
+    m_recentMenu->addSeparator();
+    auto* clearAct = m_recentMenu->addAction(QStringLiteral("Clear Recent"));
+    connect(clearAct, &QAction::triggered, this, &ContextMenu::clearRecentTriggered);
 }
 
 void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,

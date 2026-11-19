@@ -26,6 +26,8 @@ MediaPlayer::MediaPlayer(QObject* parent)
     connect(m_controller.get(), &MpvController::playbackEnded, this, &MediaPlayer::mediaEnded);
     connect(m_controller.get(), &MpvController::errorOccurred, this, &MediaPlayer::errorOccurred);
     connect(m_controller.get(), &MpvController::tracksChanged, this, &MediaPlayer::tracksChanged);
+    connect(m_controller.get(), &MpvController::screenshotTaken, this, &MediaPlayer::screenshotTaken);
+    connect(m_controller.get(), &MpvController::subtitleAdded, this, &MediaPlayer::subtitleAdded);
 }
 
 bool MediaPlayer::initialize() {
@@ -38,6 +40,7 @@ bool MediaPlayer::initialize() {
     m_controller->setVolume(settings.volume());
     m_controller->setMute(settings.isMuted());
     m_controller->setSpeed(settings.playbackSpeed());
+    m_controller->setDialogueBoost(settings.dialogueBoost());
 
     return true;
 }
@@ -104,6 +107,18 @@ void MediaPlayer::setVideoTrack(int id) {
 
 void MediaPlayer::setSubtitleTrack(int id) {
     m_controller->setSubtitleTrack(id);
+}
+
+void MediaPlayer::addSubtitleTrack(const QString& filePath) {
+    m_controller->addSubtitleTrack(filePath);
+}
+
+void MediaPlayer::takeScreenshot(bool includeSubtitles) {
+    m_controller->takeScreenshot(includeSubtitles);
+}
+
+void MediaPlayer::setDialogueBoost(bool enabled) {
+    m_controller->setDialogueBoost(enabled);
 }
 
 } // namespace kvikplay

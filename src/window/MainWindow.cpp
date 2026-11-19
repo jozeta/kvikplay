@@ -14,6 +14,9 @@
 #include <QWindow>
 #include <QPainter>
 #include <QDateTime>
+#include <QCollator>
+#include <QDir>
+#include <QClipboard>
 #include <algorithm>
 #include <cmath>
 
@@ -27,6 +30,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QWidget(parent)
     , m_player(std::make_unique<MediaPlayer>(this))
     , m_platform(PlatformIntegration::create())
+    , m_thumbnailWorker(std::make_unique<ThumbnailWorker>())
     , m_renderer(new VideoRenderer(this))
     , m_overlay(new PlaybackOverlay(this))
     , m_contextMenu(new ContextMenu(this))
@@ -61,6 +65,11 @@ MainWindow::MainWindow(QWidget* parent)
     });
     connect(m_overlay, &PlaybackOverlay::muteToggled, m_player.get(), &MediaPlayer::toggleMute);
     connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
+    connect(m_overlay, &PlaybackOverlay::thumbnailRequested, this, &MainWindow::onThumbnailRequested);
+
+    if (m_thumbnailWorker) {
+        connect(m_thumbnailWorker.get(), &ThumbnailWorker::thumbnailReady, this, &MainWindow::onThumbnailReady);
+    }
 
     // Player signal connections
     connect(m_player.get(), &MediaPlayer::stateChanged, this, &MainWindow::onPlaybackStateChanged);
@@ -73,6 +82,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::tracksChanged, this, &MainWindow::onTracksChanged);
     connect(m_player.get(), &MediaPlayer::mediaEnded, this, &MainWindow::onMediaEnded);
     connect(m_player.get(), &MediaPlayer::errorOccurred, this, &MainWindow::onErrorOccurred);
+    connect(m_player.get(), &MediaPlayer::screenshotTaken, this, &MainWindow::onScreenshotTaken);
 
     // Context menu connections
     connect(m_contextMenu, &ContextMenu::playPauseTriggered, m_player.get(), &MediaPlayer::togglePlayPause);
@@ -81,6 +91,21 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::reverseTrackpadToggled, this, [](bool rev) {
         SettingsManager::instance().setReverseTrackpadScrubbing(rev);
         SettingsManager::instance().save();
+    });
+    connect(m_contextMenu, &ContextMenu::dialogueBoostToggled, this, [this](bool enabled) {
+        SettingsManager::instance().setDialogueBoost(enabled);
+        SettingsManager::instance().save();
+        m_player->setDialogueBoost(enabled);
+        m_overlay->showOsd(enabled ? QStringLiteral("Dialogue Boost: ON") : QStringLiteral("Dialogue Boost: OFF"));
+    });
+    connect(m_contextMenu, &ContextMenu::recentFileSelected, this, &MainWindow::openFile);
+    connect(m_contextMenu, &ContextMenu::clearRecentTriggered, this, [this]() {
+        SettingsManager::instance().clearRecentFiles();
+        SettingsManager::instance().save();
+        m_contextMenu->setRecentFiles({});
+    });
+    connect(m_contextMenu, &ContextMenu::screenshotTriggered, this, [this]() {
+        m_player->takeScreenshot(false);
     });
     connect(m_contextMenu, &ContextMenu::fileAssociationsTriggered, this, &MainWindow::showFileAssociationsDialog);
     connect(m_contextMenu, &ContextMenu::aboutTriggered, this, &MainWindow::showAboutDialog);
@@ -108,6 +133,10 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    if (m_thumbnailWorker) {
+        m_thumbnailWorker->stop();
+        m_thumbnailWorker.reset();
+    }
     // Free render context before mpv core is destroyed
     if (m_renderer) {
         delete m_renderer;
@@ -150,6 +179,11 @@ bool MainWindow::initialize() {
     m_overlay->setVolume(settings.volume());
     m_overlay->setMuted(settings.isMuted());
     m_contextMenu->setReverseTrackpad(settings.reverseTrackpadScrubbing());
+    m_contextMenu->setRecentFiles(settings.recentFiles());
+
+    bool dBoost = settings.dialogueBoost();
+    m_player->setDialogueBoost(dBoost);
+    m_contextMenu->setDialogueBoost(dBoost);
 
     // Native platform window setup
     if (m_platform) {
@@ -168,6 +202,23 @@ bool MainWindow::initialize() {
 }
 
 void MainWindow::openFile(const QString& filePath) {
+    if (!m_currentFilePath.isEmpty() && m_player->hasMedia()) {
+        double curPos = m_player->position();
+        double dur = m_player->duration();
+        if (curPos > 5.0 && (dur <= 0.0 || curPos < dur - 5.0)) {
+            SettingsManager::instance().setResumePosition(m_currentFilePath, curPos);
+        }
+    }
+
+    m_currentFilePath = filePath;
+    SettingsManager::instance().addRecentFile(filePath);
+    SettingsManager::instance().save();
+    m_contextMenu->setRecentFiles(SettingsManager::instance().recentFiles());
+
+    if (m_thumbnailWorker) {
+        m_thumbnailWorker->openFile(filePath);
+    }
+
     m_player->openMedia(filePath);
     m_player->play(); // Auto-play straight away
 }
@@ -204,6 +255,17 @@ void MainWindow::onMediaLoaded(const MediaInfo& info) {
     m_overlay->setDuration(info.duration);
     m_contextMenu->setTracks(info.audioTracks, info.videoTracks, info.subtitleTracks);
     m_player->play(); // Ensure immediate playback on open
+
+    double resumePos = SettingsManager::instance().resumePosition(info.filePath);
+    if (resumePos > 5.0 && (info.duration <= 0.0 || resumePos < info.duration - 5.0)) {
+        m_player->seekAbsolute(resumePos);
+        int m = static_cast<int>(resumePos) / 60;
+        int s = static_cast<int>(resumePos) % 60;
+        m_overlay->showOsd(QStringLiteral("Resumed at %1:%2")
+            .arg(m, 2, 10, QChar('0'))
+            .arg(s, 2, 10, QChar('0')));
+    }
+
     updateRendererGeometry();
 }
 
@@ -237,12 +299,89 @@ void MainWindow::onDurationChanged(double seconds) {
 }
 
 void MainWindow::onMediaEnded() {
+    SettingsManager::instance().clearResumePosition(m_currentFilePath);
+    SettingsManager::instance().save();
     m_overlay->setPlaying(false);
     m_contextMenu->setPlaying(false);
+    playNextInFolder();
 }
 
 void MainWindow::onErrorOccurred(const QString& error) {
     m_overlay->showOsd(error);
+}
+
+void MainWindow::onScreenshotTaken(const QString& filePath) {
+    QImage img(filePath);
+    if (!img.isNull()) {
+        QGuiApplication::clipboard()->setImage(img);
+    }
+    m_overlay->showOsd(QStringLiteral("Screenshot saved & copied"));
+}
+
+void MainWindow::onThumbnailRequested(double seconds) {
+    if (m_thumbnailWorker) {
+        m_thumbnailWorker->requestThumbnail(seconds);
+    }
+}
+
+void MainWindow::onThumbnailReady(double seconds, const QImage& image) {
+    m_overlay->setThumbnail(seconds, image);
+}
+
+void MainWindow::toggleDialogueBoost() {
+    bool next = !SettingsManager::instance().dialogueBoost();
+    SettingsManager::instance().setDialogueBoost(next);
+    SettingsManager::instance().save();
+    m_player->setDialogueBoost(next);
+    m_contextMenu->setDialogueBoost(next);
+    m_overlay->showOsd(next ? QStringLiteral("Dialogue Boost: ON") : QStringLiteral("Dialogue Boost: OFF"));
+}
+
+QStringList MainWindow::getFolderMediaFiles() const {
+    if (m_currentFilePath.isEmpty()) return {};
+    QFileInfo curFi(m_currentFilePath);
+    QDir dir = curFi.dir();
+    QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Readable, QDir::NoSort);
+
+    QStringList mediaFiles;
+    for (const auto& entry : entries) {
+        if (FormatRegistry::instance().isSupported(entry.fileName())) {
+            mediaFiles.push_back(entry.absoluteFilePath());
+        }
+    }
+
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    std::sort(mediaFiles.begin(), mediaFiles.end(), [&collator](const QString& a, const QString& b) {
+        return collator.compare(a, b) < 0;
+    });
+
+    return mediaFiles;
+}
+
+void MainWindow::playNextInFolder() {
+    QStringList files = getFolderMediaFiles();
+    if (files.size() <= 1) return;
+
+    int idx = files.indexOf(m_currentFilePath);
+    if (idx >= 0 && idx + 1 < files.size()) {
+        QString nextFile = files[idx + 1];
+        openFile(nextFile);
+        m_overlay->showOsd(QStringLiteral("Next: %1").arg(QFileInfo(nextFile).fileName()));
+    }
+}
+
+void MainWindow::playPreviousInFolder() {
+    QStringList files = getFolderMediaFiles();
+    if (files.size() <= 1) return;
+
+    int idx = files.indexOf(m_currentFilePath);
+    if (idx > 0) {
+        QString prevFile = files[idx - 1];
+        openFile(prevFile);
+        m_overlay->showOsd(QStringLiteral("Prev: %1").arg(QFileInfo(prevFile).fileName()));
+    }
 }
 
 void MainWindow::setAlwaysOnTop(bool top) {
@@ -391,11 +530,21 @@ void MainWindow::changeEvent(QEvent* event) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+    if (!m_currentFilePath.isEmpty() && m_player->hasMedia()) {
+        double curPos = m_player->position();
+        double dur = m_player->duration();
+        if (curPos > 5.0 && (dur <= 0.0 || curPos < dur - 5.0)) {
+            SettingsManager::instance().setResumePosition(m_currentFilePath, curPos);
+        }
+    }
     if (!m_isFullscreen) {
         SettingsManager::instance().setWindowSize(size());
         SettingsManager::instance().setWindowPosition(pos());
     }
     SettingsManager::instance().save();
+    if (m_thumbnailWorker) {
+        m_thumbnailWorker->stop();
+    }
     m_player->stop();
     QWidget::closeEvent(event);
 }
@@ -634,13 +783,18 @@ void MainWindow::leaveEvent(QEvent* /*event*/) {
     m_overlay->hideOverlay();
 }
 
+static bool isSubtitleFile(const QString& path) {
+    QString ext = QFileInfo(path).suffix().toLower();
+    return (ext == "srt" || ext == "vtt" || ext == "ass" || ext == "sub" || ext == "idx" || ext == "ssa");
+}
+
 void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
     if (event->mimeData()->hasUrls()) {
         const auto& urls = event->mimeData()->urls();
         for (const auto& url : urls) {
             if (url.isLocalFile()) {
                 QString localPath = url.toLocalFile();
-                if (FormatRegistry::instance().isSupported(localPath)) {
+                if (isSubtitleFile(localPath) || FormatRegistry::instance().isSupported(localPath)) {
                     event->acceptProposedAction();
                     return;
                 }
@@ -656,7 +810,12 @@ void MainWindow::dropEvent(QDropEvent* event) {
         for (const auto& url : urls) {
             if (url.isLocalFile()) {
                 QString localPath = url.toLocalFile();
-                if (FormatRegistry::instance().isSupported(localPath)) {
+                if (isSubtitleFile(localPath)) {
+                    m_player->addSubtitleTrack(localPath);
+                    m_overlay->showOsd(QStringLiteral("Subtitles: %1").arg(QFileInfo(localPath).fileName()));
+                    event->acceptProposedAction();
+                    return;
+                } else if (FormatRegistry::instance().isSupported(localPath)) {
                     openFile(localPath); // Automatically starts playing
                     event->acceptProposedAction();
                     return;
@@ -677,6 +836,24 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         break;
     case Qt::Key_4:
         applyWindowScale(0.25);
+        break;
+    case Qt::Key_BracketRight:
+    case Qt::Key_PageDown:
+        playNextInFolder();
+        break;
+    case Qt::Key_BracketLeft:
+    case Qt::Key_PageUp:
+        playPreviousInFolder();
+        break;
+    case Qt::Key_S:
+        if (event->modifiers() & Qt::ShiftModifier) {
+            m_player->takeScreenshot(true);
+        } else {
+            m_player->takeScreenshot(false);
+        }
+        break;
+    case Qt::Key_N:
+        toggleDialogueBoost();
         break;
     case Qt::Key_Space:
         m_player->togglePlayPause();

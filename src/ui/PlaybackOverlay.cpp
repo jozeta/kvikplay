@@ -18,6 +18,7 @@ TimelineSlider::TimelineSlider(QWidget* parent)
     setRange(0, 10000);
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::NoFocus);
+    setMouseTracking(true);
     setStyleSheet(QStringLiteral(
         "QSlider::groove:horizontal {"
         "  height: 4px;"
@@ -70,6 +71,7 @@ void TimelineSlider::mousePressEvent(QMouseEvent* event) {
         double ratio = ratioFromEvent(event);
         setValue(static_cast<int>(ratio * 10000));
         double targetSec = ratio * m_duration;
+        emit hoverMoved(targetSec, event->pos().x());
         emit draggingPositionChanged(targetSec);
         emit seekRequested(targetSec);
         event->accept();
@@ -79,10 +81,12 @@ void TimelineSlider::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineSlider::mouseMoveEvent(QMouseEvent* event) {
+    double ratio = ratioFromEvent(event);
+    double targetSec = ratio * m_duration;
+    emit hoverMoved(targetSec, event->pos().x());
+
     if (m_dragging) {
-        double ratio = ratioFromEvent(event);
         setValue(static_cast<int>(ratio * 10000));
-        double targetSec = ratio * m_duration;
         emit draggingPositionChanged(targetSec);
 
         // Throttle seek commands during rapid dragging to at most every 35ms (~30Hz)
@@ -104,10 +108,20 @@ void TimelineSlider::mouseReleaseEvent(QMouseEvent* event) {
         double ratio = ratioFromEvent(event);
         setValue(static_cast<int>(ratio * 10000));
         emit seekRequested(ratio * m_duration);
+        if (!rect().contains(event->pos())) {
+            emit hoverLeft();
+        }
         event->accept();
         return;
     }
     QSlider::mouseReleaseEvent(event);
+}
+
+void TimelineSlider::leaveEvent(QEvent* event) {
+    if (!m_dragging) {
+        emit hoverLeft();
+    }
+    QSlider::leaveEvent(event);
 }
 
 // ==========================================
@@ -127,6 +141,7 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     , m_seekFwdBtn(new QPushButton(m_controlsContainer))
     , m_volumeControl(new VolumeControl(this))
     , m_osdNotification(new OsdNotification(this))
+    , m_previewCard(new TimelinePreviewCard(this))
     , m_opacityEffect(new QGraphicsOpacityEffect(this))
     , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this)) {
 
@@ -212,6 +227,8 @@ void PlaybackOverlay::setupUi() {
     timelineLayout->addWidget(m_timeLabel, 0, Qt::AlignVCenter);
 
     connect(m_timelineSlider, &TimelineSlider::seekRequested, this, &PlaybackOverlay::seekRequested);
+    connect(m_timelineSlider, &TimelineSlider::hoverMoved, this, &PlaybackOverlay::onHoverMoved);
+    connect(m_timelineSlider, &TimelineSlider::hoverLeft, this, &PlaybackOverlay::onHoverLeft);
     connect(m_timelineSlider, &TimelineSlider::draggingPositionChanged, this, [this](double pos) {
         m_position = pos;
         updateTimeLabel();
@@ -285,6 +302,27 @@ void PlaybackOverlay::toggleTimeMode() {
     updateTimeLabel();
 }
 
+void PlaybackOverlay::onHoverMoved(double seconds, int localX) {
+    if (m_duration <= 0.0) return;
+    QPoint sliderPosInOverlay = m_timelineSlider->mapTo(this, QPoint(localX, 0));
+    m_previewCard->updatePosition(sliderPosInOverlay.x(), m_timelineContainer->y(), width());
+    m_previewCard->setTime(seconds);
+    m_previewCard->show();
+    m_previewCard->raise();
+    emit thumbnailRequested(seconds);
+}
+
+void PlaybackOverlay::onHoverLeft() {
+    m_previewCard->hide();
+    m_previewCard->clearThumbnail();
+}
+
+void PlaybackOverlay::setThumbnail(double /*seconds*/, const QImage& img) {
+    if (m_previewCard && m_previewCard->isVisible()) {
+        m_previewCard->setThumbnail(img);
+    }
+}
+
 QString PlaybackOverlay::formatTime(double seconds) {
     if (seconds < 0.0) seconds = 0.0;
     int totalSec = static_cast<int>(std::round(seconds));
@@ -346,6 +384,9 @@ void PlaybackOverlay::showOverlay() {
 }
 
 void PlaybackOverlay::hideOverlay() {
+    if (m_previewCard) {
+        m_previewCard->hide();
+    }
     m_fadeAnimation->stop();
     m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
     m_fadeAnimation->setEndValue(0.0);

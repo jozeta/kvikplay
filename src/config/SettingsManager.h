@@ -4,6 +4,7 @@
 #include <QSize>
 #include <QPoint>
 #include <QStringList>
+#include <QMap>
 
 namespace kvikplay {
 
@@ -42,6 +43,20 @@ public:
     bool reverseTrackpadScrubbing() const { return m_reverseTrackpadScrubbing; }
     void setReverseTrackpadScrubbing(bool reverse);
 
+    // Resume position
+    double resumePosition(const QString& filePath) const;
+    void setResumePosition(const QString& filePath, double pos);
+    void clearResumePosition(const QString& filePath);
+
+    // Recent files (max 8)
+    QStringList recentFiles() const { return m_recentFiles; }
+    void addRecentFile(const QString& filePath);
+    void clearRecentFiles();
+
+    // Dialogue Boost (Dynamic Audio Normalizer)
+    bool dialogueBoost() const { return m_dialogueBoost; }
+    void setDialogueBoost(bool boost);
+
     QStringList associatedExtensions() const { return m_associatedExtensions; }
     void setAssociatedExtensions(const QStringList& extensions);
 
@@ -50,6 +65,8 @@ signals:
     void volumeChanged(int vol);
     void muteChanged(bool muted);
     void reverseTrackpadScrubbingChanged(bool reverse);
+    void dialogueBoostChanged(bool boost);
+    void recentFilesChanged();
 
 private:
     SettingsManager();
@@ -63,6 +80,9 @@ private:
     double m_playbackSpeed{1.0};
     bool m_startInFullscreen{false};
     bool m_reverseTrackpadScrubbing{false};
+    bool m_dialogueBoost{false};
+    QStringList m_recentFiles;
+    QMap<QString, double> m_resumePositions;
     QStringList m_associatedExtensions;
 };
 

@@ -5,6 +5,7 @@
 #include <QPoint>
 #include <QTimer>
 #include "player/MediaPlayer.h"
+#include "player/ThumbnailWorker.h"
 #include "rendering/VideoRenderer.h"
 #include "window/AspectRatioManager.h"
 #include "ui/PlaybackOverlay.h"
@@ -63,6 +64,12 @@ private slots:
                          const std::vector<TrackInfo>& sub);
     void onMediaEnded();
     void onErrorOccurred(const QString& error);
+    void onScreenshotTaken(const QString& filePath);
+    void onThumbnailRequested(double seconds);
+    void onThumbnailReady(double seconds, const QImage& image);
+    void playNextInFolder();
+    void playPreviousInFolder();
+    void toggleDialogueBoost();
 
     void toggleFullscreen();
     void setAlwaysOnTop(bool top);
@@ -76,10 +83,14 @@ private:
     Qt::Edges hitTestEdges(const QPoint& pos) const;
     void updateCursorForEdges(Qt::Edges edges);
     void updateRendererGeometry();
+    QStringList getFolderMediaFiles() const;
 
     std::unique_ptr<MediaPlayer> m_player;
     std::unique_ptr<PlatformIntegration> m_platform;
+    std::unique_ptr<ThumbnailWorker> m_thumbnailWorker;
     AspectRatioManager m_aspectManager;
+
+    QString m_currentFilePath;
 
     VideoRenderer* m_renderer{nullptr};
     PlaybackOverlay* m_overlay{nullptr};

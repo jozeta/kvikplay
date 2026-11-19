@@ -82,6 +82,25 @@ void SettingsManager::load() {
         m_reverseTrackpadScrubbing = obj[QStringLiteral("reverseTrackpadScrubbing")].toBool(false);
     }
 
+    if (obj.contains(QStringLiteral("dialogueBoost"))) {
+        m_dialogueBoost = obj[QStringLiteral("dialogueBoost")].toBool(false);
+    }
+
+    if (obj.contains(QStringLiteral("recentFiles")) && obj[QStringLiteral("recentFiles")].isArray()) {
+        m_recentFiles.clear();
+        for (const auto& v : obj[QStringLiteral("recentFiles")].toArray()) {
+            if (v.isString()) m_recentFiles.append(v.toString());
+        }
+    }
+
+    if (obj.contains(QStringLiteral("resumePositions")) && obj[QStringLiteral("resumePositions")].isObject()) {
+        m_resumePositions.clear();
+        QJsonObject resObj = obj[QStringLiteral("resumePositions")].toObject();
+        for (auto it = resObj.begin(); it != resObj.end(); ++it) {
+            m_resumePositions.insert(it.key(), it.value().toDouble(0.0));
+        }
+    }
+
     if (obj.contains(QStringLiteral("associations")) && obj[QStringLiteral("associations")].isArray()) {
         m_associatedExtensions.clear();
         QJsonArray arr = obj[QStringLiteral("associations")].toArray();
@@ -109,6 +128,17 @@ void SettingsManager::save() const {
     obj[QStringLiteral("playbackSpeed")] = m_playbackSpeed;
     obj[QStringLiteral("startInFullscreen")] = m_startInFullscreen;
     obj[QStringLiteral("reverseTrackpadScrubbing")] = m_reverseTrackpadScrubbing;
+    obj[QStringLiteral("dialogueBoost")] = m_dialogueBoost;
+
+    QJsonArray recArr;
+    for (const auto& f : m_recentFiles) recArr.append(f);
+    obj[QStringLiteral("recentFiles")] = recArr;
+
+    QJsonObject resObj;
+    for (auto it = m_resumePositions.begin(); it != m_resumePositions.end(); ++it) {
+        resObj.insert(it.key(), it.value());
+    }
+    obj[QStringLiteral("resumePositions")] = resObj;
 
     QJsonArray arr;
     for (const auto& ext : m_associatedExtensions) {
@@ -170,6 +200,48 @@ void SettingsManager::setReverseTrackpadScrubbing(bool reverse) {
     if (m_reverseTrackpadScrubbing != reverse) {
         m_reverseTrackpadScrubbing = reverse;
         emit reverseTrackpadScrubbingChanged(m_reverseTrackpadScrubbing);
+    }
+}
+
+double SettingsManager::resumePosition(const QString& filePath) const {
+    return m_resumePositions.value(filePath, 0.0);
+}
+
+void SettingsManager::setResumePosition(const QString& filePath, double pos) {
+    if (filePath.isEmpty()) return;
+    if (pos > 5.0) {
+        m_resumePositions.insert(filePath, pos);
+        if (m_resumePositions.size() > 100) {
+            m_resumePositions.erase(m_resumePositions.begin());
+        }
+    } else {
+        m_resumePositions.remove(filePath);
+    }
+}
+
+void SettingsManager::clearResumePosition(const QString& filePath) {
+    m_resumePositions.remove(filePath);
+}
+
+void SettingsManager::addRecentFile(const QString& filePath) {
+    if (filePath.isEmpty()) return;
+    m_recentFiles.removeAll(filePath);
+    m_recentFiles.prepend(filePath);
+    while (m_recentFiles.size() > 8) {
+        m_recentFiles.removeLast();
+    }
+    emit recentFilesChanged();
+}
+
+void SettingsManager::clearRecentFiles() {
+    m_recentFiles.clear();
+    emit recentFilesChanged();
+}
+
+void SettingsManager::setDialogueBoost(bool boost) {
+    if (m_dialogueBoost != boost) {
+        m_dialogueBoost = boost;
+        emit dialogueBoostChanged(m_dialogueBoost);
     }
 }
 

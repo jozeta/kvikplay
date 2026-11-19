@@ -120,6 +120,15 @@ int main(int argc, char* argv[]) {
     }
     player.setAudioTrack(2);
 
+    // Test Dialogue Boost
+    std::cout << "[TestPlayback] Testing Dialogue Boost..." << std::endl;
+    player.setDialogueBoost(true);
+    player.setDialogueBoost(false);
+
+    // Test Subtitle addition
+    std::cout << "[TestPlayback] Testing Subtitle addition..." << std::endl;
+    player.addSubtitleTrack(findTestMedia(QStringLiteral("test_media/test_sub.srt")));
+
     // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;
     bool errorOccurred = false;

@@ -8,6 +8,7 @@
 #include <QPropertyAnimation>
 #include "VolumeControl.h"
 #include "OsdNotification.h"
+#include "TimelinePreviewCard.h"
 
 namespace kvikplay {
 
@@ -22,6 +23,8 @@ public:
 signals:
     void seekRequested(double seconds);
     void draggingPositionChanged(double seconds);
+    void hoverMoved(double seconds, int localX);
+    void hoverLeft();
 
 public slots:
     void setDuration(double duration);
@@ -31,6 +34,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void leaveEvent(QEvent* event) override;
 
 private:
     double ratioFromEvent(QMouseEvent* event) const;
@@ -53,6 +57,7 @@ public:
     void setFileName(const QString& name);
     void setPosition(double seconds);
     void setDuration(double seconds);
+    void setThumbnail(double seconds, const QImage& img);
 
     void showOsd(const QString& message);
 
@@ -67,6 +72,7 @@ signals:
     void volumeChanged(int percent);
     void muteToggled();
     void seekRequested(double seconds);
+    void thumbnailRequested(double seconds);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -79,6 +85,8 @@ protected:
 
 private slots:
     void toggleTimeMode();
+    void onHoverMoved(double seconds, int localX);
+    void onHoverLeft();
 
 private:
     void setupUi();
@@ -93,6 +101,7 @@ private:
     QWidget* m_timelineContainer{nullptr};
     TimelineSlider* m_timelineSlider{nullptr};
     QPushButton* m_timeLabel{nullptr};
+    TimelinePreviewCard* m_previewCard{nullptr};
 
     // Central buttons
     QWidget* m_controlsContainer{nullptr};
