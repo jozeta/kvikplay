@@ -11,27 +11,35 @@ During normal playback, there is practically no interface chrome—no traditiona
 ## Key Features
 
 - **Frameless Nordic Minimalist Design**:
+  - Rounded corners (`14px` radius) with native OS drop shadow.
   - No title bar, no window decorations, no standard buttons.
   - Video fills the entire window surface without letterboxing, pillarboxing, or distortion.
-- **Strict Aspect-Ratio Locking**:
+- **Strict Aspect-Ratio Locking & Quick Sizing**:
   - Automatically constrains window geometry to preserve display aspect ratio (accounting for non-square pixel SAR and metadata).
   - Native 4-corner interactive resizing on both macOS (`NSWindow setAspectRatio:`, resizable borderless window) and Windows (`WM_SIZING` and `WM_NCHITTEST`).
+  - Shortcuts `1`, `2`, `4` to jump to 100% original video size, 50% half size, and 25% quarter size.
 - **libmpv Hardware Accelerated Playback**:
   - Renders directly into Qt 6 OpenGL surface (`QOpenGLWidget`) via the `mpv_render_context` OpenGL Render API.
   - Automatic hardware decoding (`VideoToolbox` on macOS, `D3D11VA` on Windows).
   - Audio-only mode with a clean, neutral slate graphic rather than a broken screen.
+  - Multi-track support: Audio, Video, and Subtitle selection submenus in the context menu (automatically greyed out if no additional tracks exist).
 - **Fluid Mouse Interactions**:
+  - **Single Click**: Toggle Play / Pause anywhere on the video.
+  - **Click and Drag**: Move the frameless window.
   - **Mouse Wheel**: Seek forwards/backwards 10s.
   - **Shift + Mouse Wheel**: Seek forwards/backwards 30s.
   - **Ctrl + Mouse Wheel**: Volume adjustment in 5% increments.
-  - **Double-Click**: Toggle Play/Pause.
-  - **Right-Click**: Minimalist context menu (Play/Pause, Always on Top, Fullscreen, File Associations, About, Close).
-  - **Window Move**: Click and drag video area outside controls to smoothly move window.
-- **Lightweight Playback Overlay**:
-  - Semi-transparent white circular controls (Seek -10s, Play/Pause, Seek +10s, Close button).
+  - **Right-Click**: Minimalist context menu with track selectors, Always on Top, Fullscreen, and Settings.
+  - **Hover**: Displays the OSD as soon as the mouse is hovering over the window and keeps it visible as long as the mouse is on top of the player.
+- **Transparent Frosted OSD**:
+  - Highly transparent, frosted glass styling with zero black background.
+  - Filename displayed in the top-left corner in clean, small typography.
+  - Interactive timeline seek bar with draggable handle marker.
+  - Time display: `Current Time / Total Time` (e.g. `01:23 / 03:45`).
+  - Clickable Time: Click the time label to toggle between elapsed time and remaining time (e.g. `-02:22 / 03:45`).
+  - Semi-transparent circular controls (Seek -10s, Play/Pause, Seek +10s, Close).
   - Vertical volume slider with mute/unmute toggle.
-  - 150ms fade animation on hover; auto-hides when mouse leaves or stops moving.
-  - Visual OSD feedback badge (`+10s`, `-10s`, `Volume 75%`, `Muted`).
+  - Visual OSD feedback badge (`+10s`, `-10s`, `Volume 75%`, `Size: 100%`).
 - **Fullscreen Mode**:
   - Full display occupancy with auto-hiding cursor after 2.5s inactivity.
   - Aspect ratio preserved on pure black background.
@@ -49,7 +57,10 @@ During normal playback, there is practically no interface chrome—no traditiona
 
 | Shortcut | Action |
 |---|---|
-| `Space` | Play / Pause |
+| `Space` / `Click` | Play / Pause |
+| `1` | Original size (100% video resolution) |
+| `2` | Half size (50% video resolution) |
+| `4` | Quarter size (25% video resolution) |
 | `Left Arrow` | Seek backward 10 seconds |
 | `Right Arrow` | Seek forward 10 seconds |
 | `Shift + Left` | Seek backward 30 seconds |
