@@ -65,9 +65,8 @@ int main(int argc, char* argv[]) {
     // 3. Test Anamorphic Video (720x480 SAR 32/27 => DAR 16/9)
     std::cout << "[TestPlayback] Testing Anamorphic Video..." << std::endl;
     loaded = false;
-    paramsChanged = false;
     player.openMedia(findTestMedia(QStringLiteral("test_media/test_anamorphic.mp4")));
-    for (int i = 0; i < 150 && (!loaded || !paramsChanged); ++i) {
+    for (int i = 0; i < 150 && (!loaded || std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) >= 0.1); ++i) {
         QThread::msleep(20);
         app.processEvents();
     }
@@ -75,7 +74,6 @@ int main(int argc, char* argv[]) {
     assert(player.mediaInfo().hasVideo());
     assert(player.mediaInfo().width == 720);
     assert(player.mediaInfo().height == 480);
-    // Display aspect ratio should be ~16:9 (1.777), NOT 720/480 = 1.5!
     std::cout << "Detected Anamorphic DAR: " << player.mediaInfo().aspectRatio << std::endl;
     assert(std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) < 0.1);
 
@@ -106,7 +104,23 @@ int main(int argc, char* argv[]) {
     assert(player.mediaInfo().isAudioOnly);
     assert(!player.mediaInfo().hasVideo());
 
-    // 6. Test Corrupt File Error Handling
+    // 6. Test Multi-Track Audio Selection
+    std::cout << "[TestPlayback] Testing Multi-Track Media..." << std::endl;
+    loaded = false;
+    player.openMedia(findTestMedia(QStringLiteral("test_media/test_multi_track.mkv")));
+    for (int i = 0; i < 150 && (!loaded || player.audioTracks().size() < 2); ++i) {
+        QThread::msleep(20);
+        app.processEvents();
+    }
+    assert(loaded);
+    assert(player.audioTracks().size() >= 2);
+    std::cout << "Found audio tracks: " << player.audioTracks().size() << std::endl;
+    for (const auto& trk : player.audioTracks()) {
+        std::cout << "  Track " << trk.id << ": " << trk.displayName().toStdString() << " (selected=" << trk.selected << ")" << std::endl;
+    }
+    player.setAudioTrack(2);
+
+    // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;
     bool errorOccurred = false;
     QObject::connect(&player, &MediaPlayer::errorOccurred, [&](const QString& err) {

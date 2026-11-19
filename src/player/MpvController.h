@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <vector>
 #include <mpv/client.h>
 #include "PlaybackState.h"
 #include "MediaInfo.h"
@@ -35,6 +36,15 @@ public:
 
     void setSpeed(double speed);
 
+    // Track controls
+    void setAudioTrack(int id);
+    void setVideoTrack(int id);
+    void setSubtitleTrack(int id);
+
+    const std::vector<TrackInfo>& audioTracks() const { return m_mediaInfo.audioTracks; }
+    const std::vector<TrackInfo>& videoTracks() const { return m_mediaInfo.videoTracks; }
+    const std::vector<TrackInfo>& subtitleTracks() const { return m_mediaInfo.subtitleTracks; }
+
     PlaybackState state() const { return m_state; }
     const MediaInfo& mediaInfo() const { return m_mediaInfo; }
     double position() const { return m_position; }
@@ -53,6 +63,7 @@ signals:
     void speedChanged(double speed);
     void playbackEnded();
     void errorOccurred(const QString& errorMessage);
+    void tracksChanged(const std::vector<TrackInfo>& audio, const std::vector<TrackInfo>& video, const std::vector<TrackInfo>& sub);
 
 private slots:
     void processMpvEvents();
@@ -62,6 +73,7 @@ private:
     void handleMpvEvent(mpv_event* event);
     void handlePropertyChange(mpv_event_property* prop);
     void updateVideoParams();
+    void updateTracks();
 
     mpv_handle* m_mpv{nullptr};
     PlaybackState m_state{PlaybackState::Idle};

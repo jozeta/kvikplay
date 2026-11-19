@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <memory>
+#include <vector>
 #include "MpvController.h"
 #include "PlaybackState.h"
 #include "MediaInfo.h"
@@ -35,6 +36,15 @@ public:
 
     void setSpeed(double speed);
 
+    // Track controls
+    void setAudioTrack(int id);
+    void setVideoTrack(int id);
+    void setSubtitleTrack(int id);
+
+    const std::vector<TrackInfo>& audioTracks() const { return m_controller->audioTracks(); }
+    const std::vector<TrackInfo>& videoTracks() const { return m_controller->videoTracks(); }
+    const std::vector<TrackInfo>& subtitleTracks() const { return m_controller->subtitleTracks(); }
+
     PlaybackState state() const { return m_controller->state(); }
     const MediaInfo& mediaInfo() const { return m_controller->mediaInfo(); }
     double position() const { return m_controller->position(); }
@@ -53,6 +63,7 @@ signals:
     void speedChanged(double speed);
     void mediaEnded();
     void errorOccurred(const QString& error);
+    void tracksChanged(const std::vector<TrackInfo>& audio, const std::vector<TrackInfo>& video, const std::vector<TrackInfo>& sub);
 
 private:
     std::unique_ptr<MpvController> m_controller;

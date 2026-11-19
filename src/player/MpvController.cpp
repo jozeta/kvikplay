@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <clocale>
+#include <cstring>
 
 namespace kvikplay {
 
@@ -61,6 +62,7 @@ bool MpvController::initialize() {
     mpv_observe_property(m_mpv, 6, "speed", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 7, "video-params", MPV_FORMAT_NODE);
     mpv_observe_property(m_mpv, 8, "eof-reached", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, 9, "track-list", MPV_FORMAT_NODE);
 
     mpv_set_wakeup_callback(m_mpv, onMpvWakeup, this);
     return true;
@@ -93,6 +95,7 @@ void MpvController::handleMpvEvent(mpv_event* event) {
     case MPV_EVENT_FILE_LOADED:
         m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
         updateVideoParams();
+        updateTracks();
         emit playbackStateChanged(m_state);
         emit mediaLoaded(m_mediaInfo);
         break;
@@ -159,6 +162,8 @@ void MpvController::handlePropertyChange(mpv_event_property* prop) {
         emit speedChanged(m_speed);
     } else if (name == "video-params") {
         updateVideoParams();
+    } else if (name == "track-list") {
+        updateTracks();
     } else if (name == "eof-reached" && prop->format == MPV_FORMAT_FLAG) {
         int eof = *static_cast<int*>(prop->data);
         if (eof) {
@@ -221,12 +226,82 @@ void MpvController::updateVideoParams() {
     emit videoParamsChanged(0, 0, 0, 0, 16.0 / 9.0);
 }
 
+void MpvController::updateTracks() {
+    if (!m_mpv) return;
+
+    mpv_node node;
+    if (mpv_get_property(m_mpv, "track-list", MPV_FORMAT_NODE, &node) >= 0) {
+        if (node.format == MPV_FORMAT_NODE_ARRAY) {
+            std::vector<TrackInfo> audio;
+            std::vector<TrackInfo> video;
+            std::vector<TrackInfo> sub;
+
+            for (int i = 0; i < node.u.list->num; ++i) {
+                const mpv_node& item = node.u.list->values[i];
+                if (item.format == MPV_FORMAT_NODE_MAP) {
+                    TrackInfo t;
+                    for (int k = 0; k < item.u.list->num; ++k) {
+                        const char* key = item.u.list->keys[k];
+                        const mpv_node& val = item.u.list->values[k];
+                        if (std::strcmp(key, "id") == 0 && val.format == MPV_FORMAT_INT64) {
+                            t.id = static_cast<int>(val.u.int64);
+                        } else if (std::strcmp(key, "type") == 0 && val.format == MPV_FORMAT_STRING) {
+                            t.type = QString::fromUtf8(val.u.string);
+                        } else if (std::strcmp(key, "title") == 0 && val.format == MPV_FORMAT_STRING) {
+                            t.title = QString::fromUtf8(val.u.string);
+                        } else if (std::strcmp(key, "lang") == 0 && val.format == MPV_FORMAT_STRING) {
+                            t.lang = QString::fromUtf8(val.u.string);
+                        } else if (std::strcmp(key, "codec") == 0 && val.format == MPV_FORMAT_STRING) {
+                            t.codec = QString::fromUtf8(val.u.string);
+                        } else if (std::strcmp(key, "selected") == 0 && val.format == MPV_FORMAT_FLAG) {
+                            t.selected = (val.u.flag != 0);
+                        }
+                    }
+
+                    if (t.type == QStringLiteral("audio")) {
+                        audio.push_back(t);
+                    } else if (t.type == QStringLiteral("video")) {
+                        video.push_back(t);
+                    } else if (t.type == QStringLiteral("sub")) {
+                        sub.push_back(t);
+                    }
+                }
+            }
+
+            m_mediaInfo.audioTracks = std::move(audio);
+            m_mediaInfo.videoTracks = std::move(video);
+            m_mediaInfo.subtitleTracks = std::move(sub);
+            emit tracksChanged(m_mediaInfo.audioTracks, m_mediaInfo.videoTracks, m_mediaInfo.subtitleTracks);
+        }
+        mpv_free_node_contents(&node);
+    }
+}
+
+void MpvController::setAudioTrack(int id) {
+    if (!m_mpv) return;
+    QByteArray val = (id > 0) ? QByteArray::number(id) : QByteArray("no");
+    mpv_set_property_string(m_mpv, "aid", val.constData());
+}
+
+void MpvController::setVideoTrack(int id) {
+    if (!m_mpv) return;
+    QByteArray val = (id > 0) ? QByteArray::number(id) : QByteArray("no");
+    mpv_set_property_string(m_mpv, "vid", val.constData());
+}
+
+void MpvController::setSubtitleTrack(int id) {
+    if (!m_mpv) return;
+    QByteArray val = (id > 0) ? QByteArray::number(id) : QByteArray("no");
+    mpv_set_property_string(m_mpv, "sid", val.constData());
+}
+
 void MpvController::loadFile(const QString& filePath) {
     if (!m_mpv) return;
 
     m_mediaInfo = MediaInfo{};
     m_mediaInfo.filePath = filePath;
     QFileInfo fi(filePath);
+    m_mediaInfo.fileName = fi.fileName();
     m_mediaInfo.title = fi.completeBaseName();
 
     QByteArray pathBytes = filePath.toUtf8();

@@ -12,6 +12,7 @@ namespace kvikplay {
 class FallbackPlatformIntegration : public PlatformIntegration {
 public:
     void setupFramelessWindow(QWidget*) override {}
+    void setWindowRounded(QWidget*, bool) override {}
     void setWindowAspectRatio(QWidget*, double, int, int) override {}
     bool isDefaultPlayerForExtension(const QString&) override { return false; }
     bool registerFileAssociations(const QStringList&) override { return false; }

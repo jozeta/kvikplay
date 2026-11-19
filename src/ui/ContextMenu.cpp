@@ -1,4 +1,5 @@
 #include "ContextMenu.h"
+#include <QActionGroup>
 
 namespace kvikplay {
 
@@ -21,6 +22,9 @@ ContextMenu::ContextMenu(QWidget* parent)
         "QMenu::item:selected {"
         "  background-color: #2e3440;"
         "  color: #ffffff;"
+        "}"
+        "QMenu::item:disabled {"
+        "  color: #666c7a;"
         "}"
         "QMenu::separator {"
         "  height: 1px;"
@@ -45,6 +49,18 @@ ContextMenu::ContextMenu(QWidget* parent)
 
     addSeparator();
 
+    // Track selection submenus
+    m_audioMenu = addMenu(QStringLiteral("Audio"));
+    m_audioMenu->setEnabled(false);
+
+    m_videoMenu = addMenu(QStringLiteral("Video"));
+    m_videoMenu->setEnabled(false);
+
+    m_subtitleMenu = addMenu(QStringLiteral("Subtitles"));
+    m_subtitleMenu->setEnabled(false);
+
+    addSeparator();
+
     m_fileAssocAction = addAction(QStringLiteral("File Associations..."), this, &ContextMenu::fileAssociationsTriggered);
     m_aboutAction = addAction(QStringLiteral("About"), this, &ContextMenu::aboutTriggered);
 
@@ -64,6 +80,84 @@ void ContextMenu::setAlwaysOnTop(bool onTop) {
 
 void ContextMenu::setFullscreen(bool fullscreen) {
     m_fullscreenAction->setText(fullscreen ? QStringLiteral("Exit Fullscreen") : QStringLiteral("Fullscreen"));
+}
+
+void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,
+                            const std::vector<TrackInfo>& video,
+                            const std::vector<TrackInfo>& sub) {
+    // 1. Audio tracks
+    m_audioMenu->clear();
+    if (audio.size() <= 1) {
+        m_audioMenu->setEnabled(false);
+    } else {
+        m_audioMenu->setEnabled(true);
+        auto* group = new QActionGroup(m_audioMenu);
+        for (const auto& t : audio) {
+            auto* act = m_audioMenu->addAction(t.displayName());
+            act->setCheckable(true);
+            act->setChecked(t.selected);
+            group->addAction(act);
+            int trackId = t.id;
+            connect(act, &QAction::triggered, this, [this, trackId]() {
+                emit audioTrackSelected(trackId);
+            });
+        }
+    }
+
+    // 2. Video tracks
+    m_videoMenu->clear();
+    if (video.size() <= 1) {
+        m_videoMenu->setEnabled(false);
+    } else {
+        m_videoMenu->setEnabled(true);
+        auto* group = new QActionGroup(m_videoMenu);
+        for (const auto& t : video) {
+            auto* act = m_videoMenu->addAction(t.displayName());
+            act->setCheckable(true);
+            act->setChecked(t.selected);
+            group->addAction(act);
+            int trackId = t.id;
+            connect(act, &QAction::triggered, this, [this, trackId]() {
+                emit videoTrackSelected(trackId);
+            });
+        }
+    }
+
+    // 3. Subtitles
+    m_subtitleMenu->clear();
+    if (sub.empty()) {
+        m_subtitleMenu->setEnabled(false);
+    } else {
+        m_subtitleMenu->setEnabled(true);
+        auto* group = new QActionGroup(m_subtitleMenu);
+
+        // Disabled option
+        bool anySelected = false;
+        for (const auto& t : sub) {
+            if (t.selected) anySelected = true;
+        }
+
+        auto* offAct = m_subtitleMenu->addAction(QStringLiteral("Off"));
+        offAct->setCheckable(true);
+        offAct->setChecked(!anySelected);
+        group->addAction(offAct);
+        connect(offAct, &QAction::triggered, this, [this]() {
+            emit subtitleTrackSelected(0);
+        });
+
+        m_subtitleMenu->addSeparator();
+
+        for (const auto& t : sub) {
+            auto* act = m_subtitleMenu->addAction(t.displayName());
+            act->setCheckable(true);
+            act->setChecked(t.selected);
+            group->addAction(act);
+            int trackId = t.id;
+            connect(act, &QAction::triggered, this, [this, trackId]() {
+                emit subtitleTrackSelected(trackId);
+            });
+        }
+    }
 }
 
 } // namespace kvikplay

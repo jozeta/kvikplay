@@ -31,13 +31,14 @@ MainWindow::MainWindow(QWidget* parent)
     , m_contextMenu(new ContextMenu(this))
     , m_cursorTimer(new QTimer(this)) {
 
-    // Frameless window setup
+    // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+    setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_Hover, true);
     setMouseTracking(true);
     setAcceptDrops(true);
 
-    setStyleSheet(QStringLiteral("background-color: #000000;"));
+    setStyleSheet(QStringLiteral("background-color: transparent;"));
 
     // Overlay signal connections
     connect(m_overlay, &PlaybackOverlay::playPauseClicked, m_player.get(), &MediaPlayer::togglePlayPause);
@@ -55,6 +56,7 @@ MainWindow::MainWindow(QWidget* parent)
         m_overlay->showOsd(QStringLiteral("Volume %1%").arg(vol));
     });
     connect(m_overlay, &PlaybackOverlay::muteToggled, m_player.get(), &MediaPlayer::toggleMute);
+    connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
 
     // Player signal connections
     connect(m_player.get(), &MediaPlayer::stateChanged, this, &MainWindow::onPlaybackStateChanged);
@@ -62,6 +64,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::videoParamsChanged, this, &MainWindow::onVideoParamsChanged);
     connect(m_player.get(), &MediaPlayer::volumeChanged, this, &MainWindow::onVolumeChanged);
     connect(m_player.get(), &MediaPlayer::muteChanged, this, &MainWindow::onMuteChanged);
+    connect(m_player.get(), &MediaPlayer::positionChanged, this, &MainWindow::onPositionChanged);
+    connect(m_player.get(), &MediaPlayer::durationChanged, this, &MainWindow::onDurationChanged);
+    connect(m_player.get(), &MediaPlayer::tracksChanged, this, &MainWindow::onTracksChanged);
     connect(m_player.get(), &MediaPlayer::mediaEnded, this, &MainWindow::onMediaEnded);
     connect(m_player.get(), &MediaPlayer::errorOccurred, this, &MainWindow::onErrorOccurred);
 
@@ -72,6 +77,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::fileAssociationsTriggered, this, &MainWindow::showFileAssociationsDialog);
     connect(m_contextMenu, &ContextMenu::aboutTriggered, this, &MainWindow::showAboutDialog);
     connect(m_contextMenu, &ContextMenu::closeTriggered, this, &QWidget::close);
+    connect(m_contextMenu, &ContextMenu::audioTrackSelected, m_player.get(), &MediaPlayer::setAudioTrack);
+    connect(m_contextMenu, &ContextMenu::videoTrackSelected, m_player.get(), &MediaPlayer::setVideoTrack);
+    connect(m_contextMenu, &ContextMenu::subtitleTrackSelected, m_player.get(), &MediaPlayer::setSubtitleTrack);
 
     // Fullscreen auto-hide cursor timer
     m_cursorTimer->setSingleShot(true);
@@ -115,6 +123,7 @@ bool MainWindow::initialize() {
     // Native platform window setup
     if (m_platform) {
         m_platform->setupFramelessWindow(this);
+        m_platform->setWindowRounded(this, true);
         m_platform->setWindowAspectRatio(this, m_aspectManager.aspectRatio(), savedSize.width(), savedSize.height());
     }
 
@@ -152,7 +161,16 @@ void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, i
 
 void MainWindow::onMediaLoaded(const MediaInfo& info) {
     m_renderer->setMediaInfo(info);
+    m_overlay->setFileName(info.fileName);
+    m_overlay->setDuration(info.duration);
+    m_contextMenu->setTracks(info.audioTracks, info.videoTracks, info.subtitleTracks);
     updateRendererGeometry();
+}
+
+void MainWindow::onTracksChanged(const std::vector<TrackInfo>& audio,
+                                 const std::vector<TrackInfo>& video,
+                                 const std::vector<TrackInfo>& sub) {
+    m_contextMenu->setTracks(audio, video, sub);
 }
 
 void MainWindow::onPlaybackStateChanged(PlaybackState state) {
@@ -168,6 +186,14 @@ void MainWindow::onVolumeChanged(int percent) {
 void MainWindow::onMuteChanged(bool muted) {
     m_overlay->setMuted(muted);
     m_overlay->showOsd(muted ? QStringLiteral("Muted") : QStringLiteral("Unmuted"));
+}
+
+void MainWindow::onPositionChanged(double seconds) {
+    m_overlay->setPosition(seconds);
+}
+
+void MainWindow::onDurationChanged(double seconds) {
+    m_overlay->setDuration(seconds);
 }
 
 void MainWindow::onMediaEnded() {
@@ -203,6 +229,9 @@ void MainWindow::toggleFullscreen() {
         if (m_normalGeometry.isValid()) {
             setGeometry(m_normalGeometry);
         }
+        if (m_platform) {
+            m_platform->setWindowRounded(this, true);
+        }
         setCursor(Qt::ArrowCursor);
         m_cursorTimer->stop();
     } else {
@@ -210,10 +239,45 @@ void MainWindow::toggleFullscreen() {
         m_normalGeometry = geometry();
         m_isFullscreen = true;
         m_contextMenu->setFullscreen(true);
+        if (m_platform) {
+            m_platform->setWindowRounded(this, false);
+        }
         showFullScreen();
         m_cursorTimer->start(2500);
     }
     updateRendererGeometry();
+}
+
+void MainWindow::applyWindowScale(double scale) {
+    if (m_isFullscreen) {
+        toggleFullscreen();
+    }
+
+    int dw = m_player->mediaInfo().displayWidth;
+    int dh = m_player->mediaInfo().displayHeight;
+    if (dw <= 0 || dh <= 0) {
+        dw = 960;
+        dh = 540;
+    }
+
+    int targetW = static_cast<int>(std::round(dw * scale));
+    int targetH = static_cast<int>(std::round(dh * scale));
+
+    QSize minSize = m_aspectManager.minimumSize();
+    if (targetW < minSize.width()) {
+        targetW = minSize.width();
+        targetH = static_cast<int>(std::round(targetW / m_aspectManager.aspectRatio()));
+    }
+    if (targetH < minSize.height()) {
+        targetH = minSize.height();
+        targetW = static_cast<int>(std::round(targetH * m_aspectManager.aspectRatio()));
+    }
+
+    QPoint oldCenter = geometry().center();
+    resize(targetW, targetH);
+    move(oldCenter.x() - targetW / 2, oldCenter.y() - targetH / 2);
+
+    m_overlay->showOsd(QStringLiteral("Size: %1%").arg(static_cast<int>(scale * 100)));
 }
 
 void MainWindow::onCursorInactivityTimeout() {
@@ -301,18 +365,16 @@ void MainWindow::mousePressEvent(QMouseEvent* event) {
             return;
         }
 
-        // Click on client area moves the frameless window
-        if (!m_isFullscreen && windowHandle()) {
-            windowHandle()->startSystemMove();
-            event->accept();
-            return;
-        }
+        m_pressPos = event->pos();
+        m_draggingWindow = false;
+        event->accept();
+        return;
     }
     QWidget::mousePressEvent(event);
 }
 
 void MainWindow::mouseMoveEvent(QMouseEvent* event) {
-    // Show overlay and handle cursors
+    // Show overlay immediately on hover
     m_overlay->showOverlay();
 
     if (m_isFullscreen) {
@@ -321,18 +383,37 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
     } else {
         Qt::Edges edges = hitTestEdges(event->pos());
         updateCursorForEdges(edges);
+
+        // If left button held down, check if user started dragging window
+        if ((event->buttons() & Qt::LeftButton) && !m_draggingWindow) {
+            if ((event->pos() - m_pressPos).manhattanLength() > 6) {
+                m_draggingWindow = true;
+                if (windowHandle()) {
+                    windowHandle()->startSystemMove();
+                }
+            }
+        }
     }
 
     QWidget::mouseMoveEvent(event);
 }
 
-void MainWindow::mouseDoubleClickEvent(QMouseEvent* event) {
+void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        m_player->togglePlayPause();
-        event->accept();
-        return;
+        // Single-click toggles play/pause if not dragging
+        if (!m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
+            m_player->togglePlayPause();
+            event->accept();
+            return;
+        }
+        m_draggingWindow = false;
     }
-    QWidget::mouseDoubleClickEvent(event);
+    QWidget::mouseReleaseEvent(event);
+}
+
+void MainWindow::mouseDoubleClickEvent(QMouseEvent* event) {
+    // Single click already handles play/pause, ignore double click to prevent double toggle
+    event->accept();
 }
 
 void MainWindow::wheelEvent(QWheelEvent* event) {
@@ -416,6 +497,15 @@ void MainWindow::dropEvent(QDropEvent* event) {
 
 void MainWindow::keyPressEvent(QKeyEvent* event) {
     switch (event->key()) {
+    case Qt::Key_1:
+        applyWindowScale(1.0);
+        break;
+    case Qt::Key_2:
+        applyWindowScale(0.5);
+        break;
+    case Qt::Key_4:
+        applyWindowScale(0.25);
+        break;
     case Qt::Key_Space:
         m_player->togglePlayPause();
         break;

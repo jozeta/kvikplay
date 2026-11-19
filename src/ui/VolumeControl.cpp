@@ -20,17 +20,18 @@ VolumeControl::VolumeControl(QWidget* parent)
     setFixedSize(46, 190);
     setAttribute(Qt::WA_NoSystemBackground);
 
-    // Setup icon button at bottom
+    // Setup icon button at bottom - transparent Nordic glass
     m_iconButton->setFixedSize(38, 38);
     m_iconButton->setCursor(Qt::PointingHandCursor);
     m_iconButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
-        "  background-color: rgba(255, 255, 255, 0.85);"
-        "  border: 1px solid rgba(0, 0, 0, 0.1);"
+        "  background-color: rgba(255, 255, 255, 0.35);"
+        "  border: 1px solid rgba(255, 255, 255, 0.45);"
         "  border-radius: 19px;"
+        "  color: #121316;"
         "}"
         "QPushButton:hover {"
-        "  background-color: rgba(255, 255, 255, 1.0);"
+        "  background-color: rgba(255, 255, 255, 0.65);"
         "}"
     ));
     m_iconButton->setIconSize(QSize(20, 20));
@@ -78,7 +79,6 @@ VolumeControl::VolumeControl(QWidget* parent)
         "}"
         "QSlider::handle:vertical:hover {"
         "  background: #000000;"
-        "  transform: scale(1.1);"
         "}"
     ));
     sliderLayout->addWidget(m_slider, 1, Qt::AlignHCenter);
@@ -156,8 +156,8 @@ void VolumeControl::paintEvent(QPaintEvent* /*event*/) {
         QRect sliderRect = m_sliderContainer->geometry();
         QPainterPath path;
         path.addRoundedRect(sliderRect, 20, 20);
-        painter.fillPath(path, QColor(255, 255, 255, 230));
-        painter.setPen(QPen(QColor(0, 0, 0, 25), 1.0));
+        painter.fillPath(path, QColor(255, 255, 255, 150));
+        painter.setPen(QPen(QColor(255, 255, 255, 120), 1.0));
         painter.drawPath(path);
     }
 }

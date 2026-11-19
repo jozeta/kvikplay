@@ -25,6 +25,7 @@ MediaPlayer::MediaPlayer(QObject* parent)
     connect(m_controller.get(), &MpvController::speedChanged, this, &MediaPlayer::speedChanged);
     connect(m_controller.get(), &MpvController::playbackEnded, this, &MediaPlayer::mediaEnded);
     connect(m_controller.get(), &MpvController::errorOccurred, this, &MediaPlayer::errorOccurred);
+    connect(m_controller.get(), &MpvController::tracksChanged, this, &MediaPlayer::tracksChanged);
 }
 
 bool MediaPlayer::initialize() {
@@ -91,6 +92,18 @@ void MediaPlayer::toggleMute() {
 
 void MediaPlayer::setSpeed(double speed) {
     m_controller->setSpeed(speed);
+}
+
+void MediaPlayer::setAudioTrack(int id) {
+    m_controller->setAudioTrack(id);
+}
+
+void MediaPlayer::setVideoTrack(int id) {
+    m_controller->setVideoTrack(id);
+}
+
+void MediaPlayer::setSubtitleTrack(int id) {
+    m_controller->setSubtitleTrack(id);
 }
 
 } // namespace kvikplay

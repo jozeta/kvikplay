@@ -12,6 +12,17 @@
 #include <shellapi.h>
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "shell32.lib")
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+
+enum DWM_WINDOW_CORNER_PREFERENCE {
+    DWMWCP_DEFAULT = 0,
+    DWMWCP_DONOTROUND = 1,
+    DWMWCP_ROUND = 2,
+    DWMWCP_ROUNDSMALL = 3
+};
 #endif
 
 namespace kvikplay {
@@ -45,10 +56,28 @@ void WindowsIntegration::setupFramelessWindow(QWidget* widget) {
     style |= WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
     SetWindowLong(hwnd, GWL_STYLE, style);
 
+    // Request rounded window corners on Windows 11
+    DWM_WINDOW_CORNER_PREFERENCE preference = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
+
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                  SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
 #else
     Q_UNUSED(widget);
+#endif
+}
+
+void WindowsIntegration::setWindowRounded(QWidget* widget, bool rounded) {
+#ifdef _WIN32
+    if (!widget) return;
+    HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    if (!hwnd) return;
+
+    DWM_WINDOW_CORNER_PREFERENCE preference = rounded ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &preference, sizeof(preference));
+#else
+    Q_UNUSED(widget);
+    Q_UNUSED(rounded);
 #endif
 }
 

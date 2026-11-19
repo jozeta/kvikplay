@@ -1,13 +1,117 @@
 #include "PlaybackOverlay.h"
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QIcon>
 #include <QMouseEvent>
+#include <algorithm>
+#include <cmath>
 
 namespace kvikplay {
 
+// ==========================================
+// TimelineSlider Implementation
+// ==========================================
+
+TimelineSlider::TimelineSlider(QWidget* parent)
+    : QSlider(Qt::Horizontal, parent) {
+    setRange(0, 10000);
+    setCursor(Qt::PointingHandCursor);
+    setStyleSheet(QStringLiteral(
+        "QSlider::groove:horizontal {"
+        "  height: 4px;"
+        "  background: rgba(255, 255, 255, 0.3);"
+        "  border-radius: 2px;"
+        "}"
+        "QSlider::sub-page:horizontal {"
+        "  background: rgba(255, 255, 255, 0.95);"
+        "  border-radius: 2px;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "  background: #ffffff;"
+        "  width: 12px;"
+        "  height: 12px;"
+        "  margin: -4px 0;"
+        "  border-radius: 6px;"
+        "}"
+        "QSlider::handle:horizontal:hover {"
+        "  background: #ffffff;"
+        "  width: 14px;"
+        "  height: 14px;"
+        "  margin: -5px 0;"
+        "  border-radius: 7px;"
+        "}"
+    ));
+}
+
+void TimelineSlider::setDuration(double duration) {
+    m_duration = duration;
+}
+
+void TimelineSlider::setPosition(double position) {
+    m_position = position;
+    if (!m_dragging && m_duration > 0.0) {
+        int val = static_cast<int>(std::clamp(position / m_duration, 0.0, 1.0) * 10000);
+        blockSignals(true);
+        setValue(val);
+        blockSignals(false);
+    }
+}
+
+double TimelineSlider::ratioFromEvent(QMouseEvent* event) const {
+    if (width() <= 0) return 0.0;
+    return std::clamp(static_cast<double>(event->pos().x()) / width(), 0.0, 1.0);
+}
+
+void TimelineSlider::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        m_dragging = true;
+        double ratio = ratioFromEvent(event);
+        setValue(static_cast<int>(ratio * 10000));
+        double targetSec = ratio * m_duration;
+        emit draggingPositionChanged(targetSec);
+        emit seekRequested(targetSec);
+        event->accept();
+        return;
+    }
+    QSlider::mousePressEvent(event);
+}
+
+void TimelineSlider::mouseMoveEvent(QMouseEvent* event) {
+    if (m_dragging) {
+        double ratio = ratioFromEvent(event);
+        setValue(static_cast<int>(ratio * 10000));
+        double targetSec = ratio * m_duration;
+        emit draggingPositionChanged(targetSec);
+        emit seekRequested(targetSec);
+        event->accept();
+        return;
+    }
+    QSlider::mouseMoveEvent(event);
+}
+
+void TimelineSlider::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton && m_dragging) {
+        m_dragging = false;
+        double ratio = ratioFromEvent(event);
+        setValue(static_cast<int>(ratio * 10000));
+        emit seekRequested(ratio * m_duration);
+        event->accept();
+        return;
+    }
+    QSlider::mouseReleaseEvent(event);
+}
+
+// ==========================================
+// PlaybackOverlay Implementation
+// ==========================================
+
 PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     : QWidget(parent)
+    , m_filenameLabel(new QLabel(this))
     , m_closeButton(new QPushButton(this))
+    , m_timelineContainer(new QWidget(this))
+    , m_timelineSlider(new TimelineSlider(m_timelineContainer))
+    , m_timeLabel(new QPushButton(QStringLiteral("00:00 / 00:00"), m_timelineContainer))
     , m_controlsContainer(new QWidget(this))
     , m_seekBackBtn(new QPushButton(m_controlsContainer))
     , m_playPauseBtn(new QPushButton(m_controlsContainer))
@@ -15,8 +119,7 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     , m_volumeControl(new VolumeControl(this))
     , m_osdNotification(new OsdNotification(this))
     , m_opacityEffect(new QGraphicsOpacityEffect(this))
-    , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this))
-    , m_autoHideTimer(new QTimer(this)) {
+    , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this)) {
 
     setAttribute(Qt::WA_NoSystemBackground);
     setGraphicsEffect(m_opacityEffect);
@@ -25,39 +128,79 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     setupUi();
 
     m_fadeAnimation->setDuration(150);
-
-    m_autoHideTimer->setSingleShot(true);
-    connect(m_autoHideTimer, &QTimer::timeout, this, &PlaybackOverlay::hideOverlay);
-
     hide();
 }
 
 void PlaybackOverlay::setupUi() {
-    // Styles for minimal Nordic semi-transparent white buttons
+    // Transparent Nordic minimalist button styling - NO black background
     const QString buttonStyle = QStringLiteral(
         "QPushButton {"
-        "  background-color: rgba(255, 255, 255, 0.85);"
-        "  border: 1px solid rgba(0, 0, 0, 0.1);"
+        "  background-color: rgba(255, 255, 255, 0.35);"
+        "  border: 1px solid rgba(255, 255, 255, 0.45);"
         "  border-radius: %1px;"
+        "  color: #121316;"
         "}"
         "QPushButton:hover {"
-        "  background-color: rgba(255, 255, 255, 1.0);"
-        "  border-color: rgba(0, 0, 0, 0.2);"
+        "  background-color: rgba(255, 255, 255, 0.65);"
+        "  border-color: rgba(255, 255, 255, 0.75);"
         "}"
         "QPushButton:pressed {"
-        "  background-color: rgba(230, 230, 230, 1.0);"
+        "  background-color: rgba(255, 255, 255, 0.85);"
         "}"
     );
 
-    // 1. Close Button (top-right)
-    m_closeButton->setFixedSize(36, 36);
+    // 1. Filename Label (top-left in small text)
+    m_filenameLabel->setStyleSheet(QStringLiteral(
+        "color: rgba(255, 255, 255, 0.95);"
+        "font-size: 11px;"
+        "font-weight: 600;"
+        "background-color: rgba(255, 255, 255, 0.2);"
+        "border: 1px solid rgba(255, 255, 255, 0.3);"
+        "border-radius: 4px;"
+        "padding: 3px 8px;"
+    ));
+    m_filenameLabel->setText(QStringLiteral("No media"));
+    m_filenameLabel->adjustSize();
+
+    // 2. Close Button (top-right)
+    m_closeButton->setFixedSize(34, 34);
     m_closeButton->setCursor(Qt::PointingHandCursor);
     m_closeButton->setIcon(QIcon(QStringLiteral(":/icons/close.svg")));
-    m_closeButton->setIconSize(QSize(18, 18));
-    m_closeButton->setStyleSheet(buttonStyle.arg(18));
+    m_closeButton->setIconSize(QSize(16, 16));
+    m_closeButton->setStyleSheet(buttonStyle.arg(17));
     connect(m_closeButton, &QPushButton::clicked, this, &PlaybackOverlay::closeClicked);
 
-    // 2. Playback Controls (center-bottom)
+    // 3. Timeline row (timeline slider + time display on right)
+    auto* timelineLayout = new QHBoxLayout(m_timelineContainer);
+    timelineLayout->setContentsMargins(0, 0, 0, 0);
+    timelineLayout->setSpacing(12);
+
+    m_timeLabel->setCursor(Qt::PointingHandCursor);
+    m_timeLabel->setStyleSheet(QStringLiteral(
+        "QPushButton {"
+        "  color: #ffffff;"
+        "  font-size: 11px;"
+        "  font-weight: 600;"
+        "  background: transparent;"
+        "  border: none;"
+        "  padding: 2px 4px;"
+        "}"
+        "QPushButton:hover {"
+        "  color: rgba(255, 255, 255, 0.75);"
+        "}"
+    ));
+    connect(m_timeLabel, &QPushButton::clicked, this, &PlaybackOverlay::toggleTimeMode);
+
+    timelineLayout->addWidget(m_timelineSlider, 1);
+    timelineLayout->addWidget(m_timeLabel, 0, Qt::AlignVCenter);
+
+    connect(m_timelineSlider, &TimelineSlider::seekRequested, this, &PlaybackOverlay::seekRequested);
+    connect(m_timelineSlider, &TimelineSlider::draggingPositionChanged, this, [this](double pos) {
+        m_position = pos;
+        updateTimeLabel();
+    });
+
+    // 4. Playback Controls (center-bottom)
     auto* centerLayout = new QHBoxLayout(m_controlsContainer);
     centerLayout->setContentsMargins(0, 0, 0, 0);
     centerLayout->setSpacing(14);
@@ -89,9 +232,61 @@ void PlaybackOverlay::setupUi() {
     centerLayout->addWidget(m_seekFwdBtn);
     m_controlsContainer->adjustSize();
 
-    // 3. Volume Control (bottom-right)
+    // 5. Volume Control (bottom-right)
     connect(m_volumeControl, &VolumeControl::volumeChanged, this, &PlaybackOverlay::volumeChanged);
     connect(m_volumeControl, &VolumeControl::muteToggled, this, &PlaybackOverlay::muteToggled);
+}
+
+void PlaybackOverlay::setFileName(const QString& name) {
+    m_filenameLabel->setText(name);
+    m_filenameLabel->adjustSize();
+}
+
+void PlaybackOverlay::setPosition(double seconds) {
+    if (!m_timelineSlider->isDragging()) {
+        m_position = seconds;
+        m_timelineSlider->setPosition(seconds);
+        updateTimeLabel();
+    }
+}
+
+void PlaybackOverlay::setDuration(double seconds) {
+    m_duration = seconds;
+    m_timelineSlider->setDuration(seconds);
+    updateTimeLabel();
+}
+
+void PlaybackOverlay::toggleTimeMode() {
+    m_showRemainingTime = !m_showRemainingTime;
+    updateTimeLabel();
+}
+
+QString PlaybackOverlay::formatTime(double seconds) {
+    if (seconds < 0.0) seconds = 0.0;
+    int totalSec = static_cast<int>(std::round(seconds));
+    int h = totalSec / 3600;
+    int m = (totalSec % 3600) / 60;
+    int s = totalSec % 60;
+    if (h > 0) {
+        return QStringLiteral("%1:%2:%3")
+            .arg(h)
+            .arg(m, 2, 10, QChar('0'))
+            .arg(s, 2, 10, QChar('0'));
+    }
+    return QStringLiteral("%1:%2")
+        .arg(m, 2, 10, QChar('0'))
+        .arg(s, 2, 10, QChar('0'));
+}
+
+void PlaybackOverlay::updateTimeLabel() {
+    QString currentStr;
+    if (m_showRemainingTime) {
+        double remaining = std::max(0.0, m_duration - m_position);
+        currentStr = QStringLiteral("-%1").arg(formatTime(remaining));
+    } else {
+        currentStr = formatTime(m_position);
+    }
+    m_timeLabel->setText(QStringLiteral("%1 / %2").arg(currentStr, formatTime(m_duration)));
 }
 
 void PlaybackOverlay::setPlaying(bool playing) {
@@ -121,7 +316,6 @@ void PlaybackOverlay::showOverlay() {
     m_fadeAnimation->setStartValue(m_opacityEffect->opacity());
     m_fadeAnimation->setEndValue(1.0);
     m_fadeAnimation->start();
-    restartAutoHideTimer();
 }
 
 void PlaybackOverlay::hideOverlay() {
@@ -136,29 +330,33 @@ void PlaybackOverlay::hideOverlay() {
     m_fadeAnimation->start();
 }
 
-void PlaybackOverlay::restartAutoHideTimer() {
-    m_autoHideTimer->start(1800);
-}
-
 void PlaybackOverlay::resizeEvent(QResizeEvent* /*event*/) {
     positionControls();
 }
 
 void PlaybackOverlay::positionControls() {
-    const int margin = 20;
+    const int margin = 16;
+
+    // Top-left filename label
+    m_filenameLabel->move(margin, margin);
 
     // Top-right close button
     m_closeButton->move(width() - m_closeButton->width() - margin, margin);
 
+    // Timeline row across lower area
+    int timelineH = 24;
+    int timelineY = height() - 76;
+    m_timelineContainer->setGeometry(margin, timelineY, width() - (margin * 2), timelineH);
+
     // Center bottom playback controls
     int centerW = m_controlsContainer->width();
     int centerH = m_controlsContainer->height();
-    m_controlsContainer->move((width() - centerW) / 2, height() - centerH - margin);
+    m_controlsContainer->move((width() - centerW) / 2, height() - centerH - 10);
 
     // Bottom right volume control
     int volW = m_volumeControl->width();
     int volH = m_volumeControl->height();
-    m_volumeControl->move(width() - volW - margin, height() - volH - margin);
+    m_volumeControl->move(width() - volW - margin, height() - volH - 6);
 }
 
 } // namespace kvikplay

@@ -30,6 +30,7 @@ protected:
     // Mouse & Window interactions
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
@@ -53,6 +54,11 @@ private slots:
     void onPlaybackStateChanged(PlaybackState state);
     void onVolumeChanged(int percent);
     void onMuteChanged(bool muted);
+    void onPositionChanged(double seconds);
+    void onDurationChanged(double seconds);
+    void onTracksChanged(const std::vector<TrackInfo>& audio,
+                         const std::vector<TrackInfo>& video,
+                         const std::vector<TrackInfo>& sub);
     void onMediaEnded();
     void onErrorOccurred(const QString& error);
 
@@ -61,6 +67,7 @@ private slots:
     void showFileAssociationsDialog();
     void showAboutDialog();
     void onCursorInactivityTimeout();
+    void applyWindowScale(double scale);
 
 private:
     Qt::Edges hitTestEdges(const QPoint& pos) const;
@@ -77,6 +84,8 @@ private:
 
     QTimer* m_cursorTimer{nullptr};
     QRect m_normalGeometry;
+    QPoint m_pressPos;
+    bool m_draggingWindow{false};
     bool m_isFullscreen{false};
     bool m_isAlwaysOnTop{false};
     const int m_borderMargin{8};

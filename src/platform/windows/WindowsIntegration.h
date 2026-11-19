@@ -10,6 +10,7 @@ public:
     ~WindowsIntegration() override;
 
     void setupFramelessWindow(QWidget* widget) override;
+    void setWindowRounded(QWidget* widget, bool rounded) override;
     void setWindowAspectRatio(QWidget* widget, double ratio, int displayWidth, int displayHeight) override;
     bool isDefaultPlayerForExtension(const QString& ext) override;
     bool registerFileAssociations(const QStringList& extensions) override;

@@ -28,10 +28,37 @@ void MacOSIntegration::setupFramelessWindow(QWidget* widget) {
 
     // Enable native Cocoa resizing on the borderless window
     window.styleMask |= NSWindowStyleMaskResizable;
+
+    // Support rounded corners and transparent window surface
+    [window setOpaque:NO];
+    [window setBackgroundColor:[NSColor clearColor]];
+
+    view.wantsLayer = YES;
+    view.layer.cornerRadius = 14.0;
+    view.layer.masksToBounds = YES;
+
+    // Window drop shadow
     [window setHasShadow:YES];
+    [window invalidateShadow];
 
     // Maintain dark / modern appearance
     window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+}
+
+void MacOSIntegration::setWindowRounded(QWidget* widget, bool rounded) {
+    if (!widget) return;
+
+    NSView* view = (__bridge NSView*)(void*)widget->winId();
+    if (!view) return;
+
+    view.layer.cornerRadius = rounded ? 14.0 : 0.0;
+    view.layer.masksToBounds = YES;
+
+    NSWindow* window = [view window];
+    if (window) {
+        [window setHasShadow:rounded ? YES : NO];
+        [window invalidateShadow];
+    }
 }
 
 void MacOSIntegration::setWindowAspectRatio(QWidget* widget, double ratio, int displayWidth, int displayHeight) {
