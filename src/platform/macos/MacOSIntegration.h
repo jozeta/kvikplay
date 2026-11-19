@@ -15,6 +15,7 @@ public:
     bool isDefaultPlayerForExtension(const QString& ext) override;
     bool registerFileAssociations(const QStringList& extensions) override;
     void openSystemDefaultAppsSettings() override;
+    void installActivationObserver(QWidget* widget, std::function<void(bool activatedByMouse)> callback) override;
 };
 
 } // namespace kvikplay

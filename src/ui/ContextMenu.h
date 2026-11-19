@@ -16,6 +16,8 @@ public:
     void setPlaying(bool playing);
     void setAlwaysOnTop(bool onTop);
     void setFullscreen(bool fullscreen);
+    void setReverseTrackpad(bool reversed);
+    void setClickToPlayPause(bool enabled);
     void setTracks(const std::vector<TrackInfo>& audio,
                    const std::vector<TrackInfo>& video,
                    const std::vector<TrackInfo>& sub);
@@ -25,6 +27,8 @@ signals:
     void alwaysOnTopToggled(bool onTop);
     void fileAssociationsTriggered();
     void fullscreenToggled();
+    void reverseTrackpadToggled(bool reversed);
+    void clickToPlayPauseToggled(bool enabled);
     void aboutTriggered();
     void closeTriggered();
     void audioTrackSelected(int id);
@@ -40,6 +44,8 @@ private:
     QMenu* m_videoMenu{nullptr};
     QMenu* m_subtitleMenu{nullptr};
 
+    QAction* m_reverseTrackpadAction{nullptr};
+    QAction* m_clickToPlayPauseAction{nullptr};
     QAction* m_fileAssocAction{nullptr};
     QAction* m_aboutAction{nullptr};
     QAction* m_closeAction{nullptr};

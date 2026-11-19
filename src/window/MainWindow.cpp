@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QWindow>
 #include <QPainter>
+#include <QDateTime>
 #include <algorithm>
 #include <cmath>
 
@@ -30,7 +31,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_overlay(new PlaybackOverlay(this))
     , m_contextMenu(new ContextMenu(this))
     , m_osdTimer(new QTimer(this))
-    , m_scrollResetTimer(new QTimer(this)) {
+    , m_scrollResetTimer(new QTimer(this))
+    , m_singleClickTimer(new QTimer(this)) {
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -76,6 +78,14 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::playPauseTriggered, m_player.get(), &MediaPlayer::togglePlayPause);
     connect(m_contextMenu, &ContextMenu::alwaysOnTopToggled, this, &MainWindow::setAlwaysOnTop);
     connect(m_contextMenu, &ContextMenu::fullscreenToggled, this, &MainWindow::toggleFullscreen);
+    connect(m_contextMenu, &ContextMenu::reverseTrackpadToggled, this, [](bool rev) {
+        SettingsManager::instance().setReverseTrackpadScrubbing(rev);
+        SettingsManager::instance().save();
+    });
+    connect(m_contextMenu, &ContextMenu::clickToPlayPauseToggled, this, [](bool en) {
+        SettingsManager::instance().setClickToPlayPause(en);
+        SettingsManager::instance().save();
+    });
     connect(m_contextMenu, &ContextMenu::fileAssociationsTriggered, this, &MainWindow::showFileAssociationsDialog);
     connect(m_contextMenu, &ContextMenu::aboutTriggered, this, &MainWindow::showAboutDialog);
     connect(m_contextMenu, &ContextMenu::closeTriggered, this, &QWidget::close);
@@ -87,6 +97,14 @@ MainWindow::MainWindow(QWidget* parent)
     m_osdTimer->setSingleShot(true);
     m_osdTimer->setInterval(5000);
     connect(m_osdTimer, &QTimer::timeout, this, &MainWindow::onOsdInactivityTimeout);
+
+    // Single-click play/pause timer (distinguishes single-click from double-click fullscreen)
+    m_singleClickTimer->setSingleShot(true);
+    connect(m_singleClickTimer, &QTimer::timeout, this, [this]() {
+        if (SettingsManager::instance().clickToPlayPause()) {
+            m_player->togglePlayPause();
+        }
+    });
 
     // Trackpad scroll accumulator reset timer
     m_scrollResetTimer->setSingleShot(true);
@@ -130,18 +148,28 @@ bool MainWindow::initialize() {
         }
     }
 
+    m_normalGeometry = geometry();
+
     if (settings.alwaysOnTop()) {
         setAlwaysOnTop(true);
     }
 
     m_overlay->setVolume(settings.volume());
     m_overlay->setMuted(settings.isMuted());
+    m_contextMenu->setReverseTrackpad(settings.reverseTrackpadScrubbing());
+    m_contextMenu->setClickToPlayPause(settings.clickToPlayPause());
 
     // Native platform window setup
     if (m_platform) {
         m_platform->setupFramelessWindow(this);
         m_platform->setWindowRounded(this, true);
         m_platform->setWindowAspectRatio(this, m_aspectManager.aspectRatio(), savedSize.width(), savedSize.height());
+        m_platform->installActivationObserver(this, [this](bool activatedByMouse) {
+            m_lastActivationTime = QDateTime::currentMSecsSinceEpoch();
+            if (activatedByMouse) {
+                m_activatedByMouseClick = true;
+            }
+        });
     }
 
     return true;
@@ -172,6 +200,7 @@ void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, i
         QPoint oldCenter = geometry().center();
         resize(newSize);
         move(oldCenter.x() - newSize.width() / 2, oldCenter.y() - newSize.height() / 2);
+        m_normalGeometry = geometry();
     }
 
     updateRendererGeometry();
@@ -241,7 +270,7 @@ void MainWindow::setAlwaysOnTop(bool top) {
 
 void MainWindow::toggleFullscreen() {
     if (m_isFullscreen) {
-        // Exit fullscreen
+        // Exit fullscreen -> restore windowed mode size and position
         m_isFullscreen = false;
         m_contextMenu->setFullscreen(false);
         showNormal();
@@ -253,7 +282,7 @@ void MainWindow::toggleFullscreen() {
         }
         setCursor(Qt::ArrowCursor);
     } else {
-        // Enter fullscreen
+        // Enter fullscreen -> remember windowed size & position
         m_normalGeometry = geometry();
         m_isFullscreen = true;
         m_contextMenu->setFullscreen(true);
@@ -294,6 +323,7 @@ void MainWindow::applyWindowScale(double scale) {
     QPoint oldCenter = geometry().center();
     resize(targetW, targetH);
     move(oldCenter.x() - targetW / 2, oldCenter.y() - targetH / 2);
+    m_normalGeometry = geometry();
 
     m_overlay->showOsd(QStringLiteral("Size: %1%").arg(static_cast<int>(scale * 100)));
     m_overlay->showOverlay();
@@ -337,9 +367,29 @@ void MainWindow::updateRendererGeometry() {
 void MainWindow::resizeEvent(QResizeEvent* /*event*/) {
     updateRendererGeometry();
     if (!m_isFullscreen) {
+        m_normalGeometry = geometry();
         SettingsManager::instance().setWindowSize(size());
         SettingsManager::instance().setWindowPosition(pos());
     }
+}
+
+void MainWindow::moveEvent(QMoveEvent* /*event*/) {
+    if (!m_isFullscreen) {
+        m_normalGeometry = geometry();
+        SettingsManager::instance().setWindowPosition(pos());
+    }
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+    if (event->type() == QEvent::ActivationChange) {
+        if (isActiveWindow()) {
+            m_lastActivationTime = QDateTime::currentMSecsSinceEpoch();
+            if (QApplication::mouseButtons() != Qt::NoButton) {
+                m_activatedByMouseClick = true;
+            }
+        }
+    }
+    QWidget::changeEvent(event);
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
@@ -355,11 +405,25 @@ void MainWindow::closeEvent(QCloseEvent* event) {
 Qt::Edges MainWindow::hitTestEdges(const QPoint& pos) const {
     if (m_isFullscreen) return Qt::Edges();
 
+    int x = pos.x();
+    int y = pos.y();
+    int w = width();
+    int h = height();
+    int m = m_borderMargin;   // 16px border
+    int c = m_cornerMargin;   // 32px generous corner
+
+    // 1. Check 4 corners first with generous 32px hit zones
+    if (x <= c && y <= c) return Qt::TopEdge | Qt::LeftEdge;
+    if (x >= w - c && y <= c) return Qt::TopEdge | Qt::RightEdge;
+    if (x <= c && y >= h - c) return Qt::BottomEdge | Qt::LeftEdge;
+    if (x >= w - c && y >= h - c) return Qt::BottomEdge | Qt::RightEdge;
+
+    // 2. Check 4 edges with 16px hit zones
     Qt::Edges edges;
-    if (pos.x() <= m_borderMargin) edges |= Qt::LeftEdge;
-    if (pos.x() >= width() - m_borderMargin) edges |= Qt::RightEdge;
-    if (pos.y() <= m_borderMargin) edges |= Qt::TopEdge;
-    if (pos.y() >= height() - m_borderMargin) edges |= Qt::BottomEdge;
+    if (x <= m) edges |= Qt::LeftEdge;
+    if (x >= w - m) edges |= Qt::RightEdge;
+    if (y <= m) edges |= Qt::TopEdge;
+    if (y >= h - m) edges |= Qt::BottomEdge;
 
     return edges;
 }
@@ -381,7 +445,9 @@ void MainWindow::updateCursorForEdges(Qt::Edges edges) {
 void MainWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         // Record focus state at the exact moment of mouse click
-        m_wasActiveOnPress = isActiveWindow();
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
+        m_wasActiveOnPress = isActiveWindow() && !wasJustActivated;
 
         Qt::Edges edges = hitTestEdges(event->pos());
         if (edges != Qt::Edges() && windowHandle()) {
@@ -422,6 +488,7 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
         if ((event->buttons() & Qt::LeftButton) && !m_draggingWindow) {
             if ((event->pos() - m_pressPos).manhattanLength() > 6) {
                 m_draggingWindow = true;
+                m_singleClickTimer->stop(); // Don't trigger click action if dragging
                 if (windowHandle()) {
                     windowHandle()->startSystemMove();
                 }
@@ -434,9 +501,23 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
 
 void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        // Only toggle play/pause if window was already active/in focus when clicked
-        if (m_wasActiveOnPress && !m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
-            m_player->togglePlayPause();
+        if (m_ignoreNextRelease) {
+            m_ignoreNextRelease = false;
+            m_activatedByMouseClick = false;
+            event->accept();
+            return;
+        }
+
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        bool wasJustActivated = (now - m_lastActivationTime < 350) || m_activatedByMouseClick;
+        m_activatedByMouseClick = false;
+
+        // Only toggle play/pause if window was already active/in focus when clicked AND click-to-play-pause is enabled
+        if (m_wasActiveOnPress && !wasJustActivated && !m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
+            if (SettingsManager::instance().clickToPlayPause()) {
+                // Delay slightly to distinguish single click from double click
+                m_singleClickTimer->start(200);
+            }
             event->accept();
             return;
         }
@@ -446,8 +527,15 @@ void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void MainWindow::mouseDoubleClickEvent(QMouseEvent* event) {
-    // Single click handles play/pause, ignore double click to prevent double toggle
-    event->accept();
+    if (event->button() == Qt::LeftButton) {
+        // Double-click toggles fullscreen <-> windowed mode, remembering window size
+        m_singleClickTimer->stop(); // Cancel single click play/pause
+        m_ignoreNextRelease = true; // Prevent the 2nd click release from firing play/pause
+        toggleFullscreen();
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 void MainWindow::wheelEvent(QWheelEvent* event) {
@@ -458,12 +546,15 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
 
     // 1. Horizontal scrubbing (Mac trackpad two-finger swipe right/left)
     if (std::abs(dx) > std::abs(dy) && dx != 0) {
-        m_accumulatedScrollX += dx;
+        bool reversed = SettingsManager::instance().reverseTrackpadScrubbing();
+        int effectiveDx = reversed ? -dx : dx;
+
+        m_accumulatedScrollX += effectiveDx;
         m_scrollResetTimer->start(250);
 
         if (std::abs(m_accumulatedScrollX) >= 40) {
-            // Dragging right (positive delta) -> scrub forward
-            // Dragging left (negative delta) -> scrub backward
+            // Dragging right -> scrub forward (or reversed if enabled)
+            // Dragging left -> scrub backward (or reversed if enabled)
             double seekAmount = (m_accumulatedScrollX > 0) ? (mods & Qt::ShiftModifier ? 30.0 : 10.0)
                                                            : (mods & Qt::ShiftModifier ? -30.0 : -10.0);
             m_player->seekRelative(seekAmount);
@@ -504,6 +595,8 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent* event) {
+    m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
+    m_contextMenu->setClickToPlayPause(SettingsManager::instance().clickToPlayPause());
     m_contextMenu->exec(event->globalPos());
 }
 
@@ -650,6 +743,13 @@ void MainWindow::showAboutDialog() {
 bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result) {
     MSG* msg = static_cast<MSG*>(message);
 
+    if (msg->message == WM_MOUSEACTIVATE) {
+        m_activatedByMouseClick = true;
+        m_lastActivationTime = QDateTime::currentMSecsSinceEpoch();
+        *result = MA_ACTIVATEANDEAT;
+        return true;
+    }
+
     if (msg->message == WM_NCHITTEST && !m_isFullscreen) {
         POINT pt = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
         ScreenToClient(reinterpret_cast<HWND>(winId()), &pt);
@@ -658,12 +758,13 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
         int y = pt.y;
         int w = width();
         int h = height();
-        int m = m_borderMargin;
+        int m = m_borderMargin;   // 16px
+        int c = m_cornerMargin;   // 32px
 
-        if (x <= m && y <= m) { *result = HTTOPLEFT; return true; }
-        if (x >= w - m && y <= m) { *result = HTTOPRIGHT; return true; }
-        if (x <= m && y >= h - m) { *result = HTBOTTOMLEFT; return true; }
-        if (x >= w - m && y >= h - m) { *result = HTBOTTOMRIGHT; return true; }
+        if (x <= c && y <= c) { *result = HTTOPLEFT; return true; }
+        if (x >= w - c && y <= c) { *result = HTTOPRIGHT; return true; }
+        if (x <= c && y >= h - c) { *result = HTBOTTOMLEFT; return true; }
+        if (x >= w - c && y >= h - c) { *result = HTBOTTOMRIGHT; return true; }
         if (x <= m) { *result = HTLEFT; return true; }
         if (x >= w - m) { *result = HTRIGHT; return true; }
         if (y <= m) { *result = HTTOP; return true; }

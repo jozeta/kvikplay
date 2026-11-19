@@ -131,4 +131,23 @@ void MacOSIntegration::openSystemDefaultAppsSettings() {
     [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"x-apple.systempreferences:"]];
 }
 
+void MacOSIntegration::installActivationObserver(QWidget* widget, std::function<void(bool activatedByMouse)> callback) {
+    if (!widget) return;
+    widget->winId();
+    NSView* view = (__bridge NSView*)(void*)widget->winId();
+    if (!view) return;
+    NSWindow* window = [view window];
+    if (!window) return;
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification
+                                                      object:window
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(NSNotification* /*note*/) {
+        bool byMouse = ([NSEvent pressedMouseButtons] != 0);
+        if (callback) {
+            callback(byMouse);
+        }
+    }];
+}
+
 } // namespace kvikplay

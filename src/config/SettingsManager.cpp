@@ -78,6 +78,14 @@ void SettingsManager::load() {
         m_startInFullscreen = obj[QStringLiteral("startInFullscreen")].toBool(false);
     }
 
+    if (obj.contains(QStringLiteral("reverseTrackpadScrubbing"))) {
+        m_reverseTrackpadScrubbing = obj[QStringLiteral("reverseTrackpadScrubbing")].toBool(false);
+    }
+
+    if (obj.contains(QStringLiteral("clickToPlayPause"))) {
+        m_clickToPlayPause = obj[QStringLiteral("clickToPlayPause")].toBool(true);
+    }
+
     if (obj.contains(QStringLiteral("associations")) && obj[QStringLiteral("associations")].isArray()) {
         m_associatedExtensions.clear();
         QJsonArray arr = obj[QStringLiteral("associations")].toArray();
@@ -104,6 +112,8 @@ void SettingsManager::save() const {
     obj[QStringLiteral("alwaysOnTop")] = m_alwaysOnTop;
     obj[QStringLiteral("playbackSpeed")] = m_playbackSpeed;
     obj[QStringLiteral("startInFullscreen")] = m_startInFullscreen;
+    obj[QStringLiteral("reverseTrackpadScrubbing")] = m_reverseTrackpadScrubbing;
+    obj[QStringLiteral("clickToPlayPause")] = m_clickToPlayPause;
 
     QJsonArray arr;
     for (const auto& ext : m_associatedExtensions) {
@@ -159,6 +169,20 @@ void SettingsManager::setPlaybackSpeed(double speed) {
 
 void SettingsManager::setStartInFullscreen(bool fullscreen) {
     m_startInFullscreen = fullscreen;
+}
+
+void SettingsManager::setReverseTrackpadScrubbing(bool reverse) {
+    if (m_reverseTrackpadScrubbing != reverse) {
+        m_reverseTrackpadScrubbing = reverse;
+        emit reverseTrackpadScrubbingChanged(m_reverseTrackpadScrubbing);
+    }
+}
+
+void SettingsManager::setClickToPlayPause(bool enable) {
+    if (m_clickToPlayPause != enable) {
+        m_clickToPlayPause = enable;
+        emit clickToPlayPauseChanged(m_clickToPlayPause);
+    }
 }
 
 void SettingsManager::setAssociatedExtensions(const QStringList& extensions) {

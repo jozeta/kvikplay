@@ -3,6 +3,7 @@
 #include <QString>
 #include <QStringList>
 #include <memory>
+#include <functional>
 
 class QWindow;
 class QWidget;
@@ -21,6 +22,10 @@ public:
     virtual bool isDefaultPlayerForExtension(const QString& ext) = 0;
     virtual bool registerFileAssociations(const QStringList& extensions) = 0;
     virtual void openSystemDefaultAppsSettings() = 0;
+    virtual void installActivationObserver(QWidget* widget, std::function<void(bool activatedByMouse)> callback) {
+        (void)widget;
+        (void)callback;
+    }
 };
 
 } // namespace kvikplay

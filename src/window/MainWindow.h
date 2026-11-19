@@ -25,7 +25,9 @@ public:
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
+    void moveEvent(QMoveEvent* event) override;
     void closeEvent(QCloseEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
     // Mouse & Window interactions
     void mousePressEvent(QMouseEvent* event) override;
@@ -84,14 +86,19 @@ private:
 
     QTimer* m_osdTimer{nullptr};
     QTimer* m_scrollResetTimer{nullptr};
+    QTimer* m_singleClickTimer{nullptr};
     QRect m_normalGeometry;
     QPoint m_pressPos;
     int m_accumulatedScrollX{0};
+    qint64 m_lastActivationTime{0};
+    bool m_activatedByMouseClick{false};
+    bool m_ignoreNextRelease{false};
     bool m_wasActiveOnPress{false};
     bool m_draggingWindow{false};
     bool m_isFullscreen{false};
     bool m_isAlwaysOnTop{false};
-    const int m_borderMargin{8};
+    const int m_borderMargin{16};
+    const int m_cornerMargin{32};
 };
 
 } // namespace kvikplay

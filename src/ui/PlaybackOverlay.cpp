@@ -123,6 +123,7 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this)) {
 
     setAttribute(Qt::WA_NoSystemBackground);
+    setMouseTracking(true);
     setGraphicsEffect(m_opacityEffect);
     m_opacityEffect->setOpacity(0.0);
 
@@ -364,6 +365,63 @@ void PlaybackOverlay::positionControls() {
     int volW = m_volumeControl->width();
     int volH = m_volumeControl->height();
     m_volumeControl->move(width() - volW - margin, height() - volH - 10);
+}
+
+void PlaybackOverlay::mousePressEvent(QMouseEvent* event) {
+    if (parentWidget()) {
+        QMouseEvent parentEvent(event->type(), event->position(), event->globalPosition(),
+                                event->button(), event->buttons(), event->modifiers());
+        QCoreApplication::sendEvent(parentWidget(), &parentEvent);
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+void PlaybackOverlay::mouseMoveEvent(QMouseEvent* event) {
+    if (parentWidget()) {
+        QMouseEvent parentEvent(event->type(), event->position(), event->globalPosition(),
+                                event->button(), event->buttons(), event->modifiers());
+        QCoreApplication::sendEvent(parentWidget(), &parentEvent);
+        event->accept();
+        return;
+    }
+    QWidget::mouseMoveEvent(event);
+}
+
+void PlaybackOverlay::mouseReleaseEvent(QMouseEvent* event) {
+    if (parentWidget()) {
+        QMouseEvent parentEvent(event->type(), event->position(), event->globalPosition(),
+                                event->button(), event->buttons(), event->modifiers());
+        QCoreApplication::sendEvent(parentWidget(), &parentEvent);
+        event->accept();
+        return;
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void PlaybackOverlay::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (parentWidget()) {
+        QMouseEvent parentEvent(event->type(), event->position(), event->globalPosition(),
+                                event->button(), event->buttons(), event->modifiers());
+        QCoreApplication::sendEvent(parentWidget(), &parentEvent);
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+void PlaybackOverlay::wheelEvent(QWheelEvent* event) {
+    if (parentWidget()) {
+        QWheelEvent parentEvent(event->position(), event->globalPosition(),
+                                event->pixelDelta(), event->angleDelta(),
+                                event->buttons(), event->modifiers(),
+                                event->phase(), event->inverted());
+        QCoreApplication::sendEvent(parentWidget(), &parentEvent);
+        event->accept();
+        return;
+    }
+    QWidget::wheelEvent(event);
 }
 
 } // namespace kvikplay

@@ -39,6 +39,12 @@ public:
     bool startInFullscreen() const { return m_startInFullscreen; }
     void setStartInFullscreen(bool fullscreen);
 
+    bool reverseTrackpadScrubbing() const { return m_reverseTrackpadScrubbing; }
+    void setReverseTrackpadScrubbing(bool reverse);
+
+    bool clickToPlayPause() const { return m_clickToPlayPause; }
+    void setClickToPlayPause(bool enable);
+
     QStringList associatedExtensions() const { return m_associatedExtensions; }
     void setAssociatedExtensions(const QStringList& extensions);
 
@@ -46,6 +52,8 @@ signals:
     void alwaysOnTopChanged(bool top);
     void volumeChanged(int vol);
     void muteChanged(bool muted);
+    void reverseTrackpadScrubbingChanged(bool reverse);
+    void clickToPlayPauseChanged(bool enable);
 
 private:
     SettingsManager();
@@ -58,6 +66,8 @@ private:
     bool m_alwaysOnTop{false};
     double m_playbackSpeed{1.0};
     bool m_startInFullscreen{false};
+    bool m_reverseTrackpadScrubbing{false};
+    bool m_clickToPlayPause{true};
     QStringList m_associatedExtensions;
 };
 
