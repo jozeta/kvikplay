@@ -180,19 +180,19 @@ bool MainWindow::initialize() {
     QPoint savedPos = settings.windowPosition();
 
     m_aspectManager.setAspectRatio(static_cast<double>(savedSize.width()) / savedSize.height());
-    resize(savedSize);
 
+    // Ensure initial window geometry is strictly within available monitor space
+    QPoint initialCenter;
     if (savedPos.x() >= 0 && savedPos.y() >= 0) {
-        move(savedPos);
+        initialCenter = QPoint(savedPos.x() + savedSize.width() / 2, savedPos.y() + savedSize.height() / 2);
     } else {
-        // Center on screen
         if (QScreen* screen = QGuiApplication::primaryScreen()) {
-            QRect scrGeo = screen->availableGeometry();
-            move(scrGeo.center().x() - savedSize.width() / 2, scrGeo.center().y() - savedSize.height() / 2);
+            initialCenter = screen->availableGeometry().center();
+        } else {
+            initialCenter = QPoint(960, 540);
         }
     }
-
-    m_normalGeometry = geometry();
+    fitAndPositionWindow(savedSize, initialCenter);
 
     if (settings.alwaysOnTop()) {
         setAlwaysOnTop(true);
@@ -258,14 +258,12 @@ void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, i
 
     if (!m_isFullscreen) {
         QScreen* scr = screen();
+        if (!scr) scr = QGuiApplication::screenAt(geometry().center());
         if (!scr) scr = QGuiApplication::primaryScreen();
         QSize maxBounds = scr ? scr->availableGeometry().size() : QSize(1920, 1080);
 
         QSize newSize = m_aspectManager.calculateInitialWindowSize(displayWidth, displayHeight, maxBounds);
-        QPoint oldCenter = geometry().center();
-        resize(newSize);
-        move(oldCenter.x() - newSize.width() / 2, oldCenter.y() - newSize.height() / 2);
-        m_normalGeometry = geometry();
+        fitAndPositionWindow(newSize, geometry().center());
     }
 
     updateRendererGeometry();
@@ -521,24 +519,80 @@ void MainWindow::applyWindowScale(double scale) {
     int targetW = static_cast<int>(std::round(dw * scale));
     int targetH = static_cast<int>(std::round(dh * scale));
 
-    QSize minSize = m_aspectManager.minimumSize();
-    if (targetW < minSize.width()) {
-        targetW = minSize.width();
-        targetH = static_cast<int>(std::round(targetW / m_aspectManager.aspectRatio()));
-    }
-    if (targetH < minSize.height()) {
-        targetH = minSize.height();
-        targetW = static_cast<int>(std::round(targetH * m_aspectManager.aspectRatio()));
-    }
-
-    QPoint oldCenter = geometry().center();
-    resize(targetW, targetH);
-    move(oldCenter.x() - targetW / 2, oldCenter.y() - targetH / 2);
-    m_normalGeometry = geometry();
+    fitAndPositionWindow(QSize(targetW, targetH), geometry().center());
 
     m_overlay->showOsd(QStringLiteral("Size: %1%").arg(static_cast<int>(scale * 100)));
     m_overlay->showOverlay();
     m_osdTimer->start(5000);
+}
+
+void MainWindow::fitAndPositionWindow(const QSize& targetSize, const QPoint& preferredCenter) {
+    QScreen* scr = screen();
+    if (!scr) {
+        scr = QGuiApplication::screenAt(preferredCenter);
+    }
+    if (!scr) {
+        scr = QGuiApplication::screenAt(geometry().center());
+    }
+    if (!scr) {
+        scr = QGuiApplication::primaryScreen();
+    }
+
+    QRect availGeo = scr ? scr->availableGeometry() : QRect(0, 0, 1920, 1080);
+
+    // Keep a comfortable 16px margin from all display boundaries
+    const int margin = 16;
+    int maxW = std::max(200, availGeo.width() - (margin * 2));
+    int maxH = std::max(150, availGeo.height() - (margin * 2));
+
+    int w = targetSize.width();
+    int h = targetSize.height();
+
+    // Scale down proportionally if larger than the available monitor bounds
+    if (w > maxW || h > maxH) {
+        double scaleW = static_cast<double>(maxW) / w;
+        double scaleH = static_cast<double>(maxH) / h;
+        double scale = std::min(scaleW, scaleH);
+        w = static_cast<int>(std::round(w * scale));
+        h = static_cast<int>(std::round(h * scale));
+    }
+
+    // Clamp against minimum allowed window size
+    QSize minSize = m_aspectManager.minimumSize();
+    if (w < minSize.width() && maxW >= minSize.width()) {
+        w = minSize.width();
+        h = static_cast<int>(std::round(w / m_aspectManager.aspectRatio()));
+    }
+    if (h < minSize.height() && maxH >= minSize.height()) {
+        h = minSize.height();
+        w = static_cast<int>(std::round(h * m_aspectManager.aspectRatio()));
+    }
+
+    // Target top-left derived from preferred center
+    int targetX = preferredCenter.x() - w / 2;
+    int targetY = preferredCenter.y() - h / 2;
+
+    // Strict boundary clamping so the entire window is 100% inside the monitor area
+    int minX = availGeo.left() + margin;
+    int maxX = availGeo.right() - w - margin;
+    int minY = availGeo.top() + margin;
+    int maxY = availGeo.bottom() - h - margin;
+
+    if (maxX >= minX) {
+        targetX = std::clamp(targetX, minX, maxX);
+    } else {
+        targetX = availGeo.left() + (availGeo.width() - w) / 2;
+    }
+
+    if (maxY >= minY) {
+        targetY = std::clamp(targetY, minY, maxY);
+    } else {
+        targetY = availGeo.top() + (availGeo.height() - h) / 2;
+    }
+
+    resize(w, h);
+    move(targetX, targetY);
+    m_normalGeometry = geometry();
 }
 
 void MainWindow::onOsdInactivityTimeout() {

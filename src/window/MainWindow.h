@@ -89,6 +89,7 @@ private:
     Qt::Edges hitTestEdges(const QPoint& pos) const;
     void updateCursorForEdges(Qt::Edges edges);
     void updateRendererGeometry();
+    void fitAndPositionWindow(const QSize& targetSize, const QPoint& preferredCenter);
     QStringList getFolderMediaFiles() const;
 
     std::unique_ptr<MediaPlayer> m_player;
