@@ -19,10 +19,12 @@ VolumeControl::VolumeControl(QWidget* parent)
 
     setFixedSize(46, 190);
     setAttribute(Qt::WA_NoSystemBackground);
+    setFocusPolicy(Qt::NoFocus);
 
     // Setup icon button at bottom - transparent Nordic glass
     m_iconButton->setFixedSize(38, 38);
     m_iconButton->setCursor(Qt::PointingHandCursor);
+    m_iconButton->setFocusPolicy(Qt::NoFocus);
     m_iconButton->setStyleSheet(QStringLiteral(
         "QPushButton {"
         "  background-color: rgba(255, 255, 255, 0.35);"
@@ -56,6 +58,7 @@ VolumeControl::VolumeControl(QWidget* parent)
     m_slider->setRange(0, 100);
     m_slider->setValue(m_volume);
     m_slider->setCursor(Qt::PointingHandCursor);
+    m_slider->setFocusPolicy(Qt::NoFocus);
     m_slider->setStyleSheet(QStringLiteral(
         "QSlider::groove:vertical {"
         "  background: rgba(0, 0, 0, 0.15);"

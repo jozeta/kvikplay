@@ -46,6 +46,9 @@ bool MpvController::initialize() {
     // Hardware decoding: try auto-safe (VideoToolbox on macOS, D3D11VA on Windows)
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
 
+    // Position subtitles cleanly above the bottom controls area
+    mpv_set_option_string(m_mpv, "sub-margin-y", "70");
+
     if (mpv_initialize(m_mpv) < 0) {
         qWarning() << "Failed to initialize mpv context";
         mpv_destroy(m_mpv);
@@ -307,6 +310,10 @@ void MpvController::loadFile(const QString& filePath) {
     QByteArray pathBytes = filePath.toUtf8();
     const char* cmd[] = {"loadfile", pathBytes.constData(), nullptr};
     mpv_command_async(m_mpv, 0, cmd);
+
+    // Auto-play immediately when opening a file
+    int pauseFlag = 0;
+    mpv_set_property_async(m_mpv, 0, "pause", MPV_FORMAT_FLAG, &pauseFlag);
 }
 
 void MpvController::play() {

@@ -29,7 +29,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_renderer(new VideoRenderer(this))
     , m_overlay(new PlaybackOverlay(this))
     , m_contextMenu(new ContextMenu(this))
-    , m_cursorTimer(new QTimer(this)) {
+    , m_osdTimer(new QTimer(this))
+    , m_scrollResetTimer(new QTimer(this)) {
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -37,6 +38,7 @@ MainWindow::MainWindow(QWidget* parent)
     setAttribute(Qt::WA_Hover, true);
     setMouseTracking(true);
     setAcceptDrops(true);
+    setFocusPolicy(Qt::StrongFocus);
 
     setStyleSheet(QStringLiteral("background-color: transparent;"));
 
@@ -81,12 +83,27 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::videoTrackSelected, m_player.get(), &MediaPlayer::setVideoTrack);
     connect(m_contextMenu, &ContextMenu::subtitleTrackSelected, m_player.get(), &MediaPlayer::setSubtitleTrack);
 
-    // Fullscreen auto-hide cursor timer
-    m_cursorTimer->setSingleShot(true);
-    connect(m_cursorTimer, &QTimer::timeout, this, &MainWindow::onCursorInactivityTimeout);
+    // OSD 5-second inactivity timer
+    m_osdTimer->setSingleShot(true);
+    m_osdTimer->setInterval(5000);
+    connect(m_osdTimer, &QTimer::timeout, this, &MainWindow::onOsdInactivityTimeout);
+
+    // Trackpad scroll accumulator reset timer
+    m_scrollResetTimer->setSingleShot(true);
+    m_scrollResetTimer->setInterval(250);
+    connect(m_scrollResetTimer, &QTimer::timeout, this, [this]() {
+        m_accumulatedScrollX = 0;
+    });
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    // Free render context before mpv core is destroyed
+    if (m_renderer) {
+        delete m_renderer;
+        m_renderer = nullptr;
+    }
+    m_player.reset();
+}
 
 bool MainWindow::initialize() {
     if (!m_player->initialize()) {
@@ -132,6 +149,7 @@ bool MainWindow::initialize() {
 
 void MainWindow::openFile(const QString& filePath) {
     m_player->openMedia(filePath);
+    m_player->play(); // Auto-play straight away
 }
 
 void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, int displayHeight, double dar) {
@@ -164,6 +182,7 @@ void MainWindow::onMediaLoaded(const MediaInfo& info) {
     m_overlay->setFileName(info.fileName);
     m_overlay->setDuration(info.duration);
     m_contextMenu->setTracks(info.audioTracks, info.videoTracks, info.subtitleTracks);
+    m_player->play(); // Ensure immediate playback on open
     updateRendererGeometry();
 }
 
@@ -233,7 +252,6 @@ void MainWindow::toggleFullscreen() {
             m_platform->setWindowRounded(this, true);
         }
         setCursor(Qt::ArrowCursor);
-        m_cursorTimer->stop();
     } else {
         // Enter fullscreen
         m_normalGeometry = geometry();
@@ -243,8 +261,8 @@ void MainWindow::toggleFullscreen() {
             m_platform->setWindowRounded(this, false);
         }
         showFullScreen();
-        m_cursorTimer->start(2500);
     }
+    m_osdTimer->start(5000);
     updateRendererGeometry();
 }
 
@@ -278,18 +296,20 @@ void MainWindow::applyWindowScale(double scale) {
     move(oldCenter.x() - targetW / 2, oldCenter.y() - targetH / 2);
 
     m_overlay->showOsd(QStringLiteral("Size: %1%").arg(static_cast<int>(scale * 100)));
+    m_overlay->showOverlay();
+    m_osdTimer->start(5000);
 }
 
-void MainWindow::onCursorInactivityTimeout() {
+void MainWindow::onOsdInactivityTimeout() {
+    m_overlay->hideOverlay();
     if (m_isFullscreen) {
         setCursor(Qt::BlankCursor);
-        m_overlay->hideOverlay();
     }
 }
 
 void MainWindow::updateRendererGeometry() {
     if (m_isFullscreen) {
-        // Center video preserving aspect ratio on the fullscreen black canvas
+        // Center video preserving aspect ratio on fullscreen black canvas
         double ratio = m_aspectManager.aspectRatio();
         int screenW = width();
         int screenH = height();
@@ -311,6 +331,7 @@ void MainWindow::updateRendererGeometry() {
     }
 
     m_overlay->setGeometry(rect());
+    m_overlay->raise(); // Ensure overlay is strictly above video and subtitles
 }
 
 void MainWindow::resizeEvent(QResizeEvent* /*event*/) {
@@ -327,6 +348,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         SettingsManager::instance().setWindowPosition(pos());
     }
     SettingsManager::instance().save();
+    m_player->stop();
     QWidget::closeEvent(event);
 }
 
@@ -358,6 +380,9 @@ void MainWindow::updateCursorForEdges(Qt::Edges edges) {
 
 void MainWindow::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
+        // Record focus state at the exact moment of mouse click
+        m_wasActiveOnPress = isActiveWindow();
+
         Qt::Edges edges = hitTestEdges(event->pos());
         if (edges != Qt::Edges() && windowHandle()) {
             windowHandle()->startSystemResize(edges);
@@ -367,6 +392,13 @@ void MainWindow::mousePressEvent(QMouseEvent* event) {
 
         m_pressPos = event->pos();
         m_draggingWindow = false;
+
+        // If not in focus, bring window to front and don't toggle playback
+        if (!m_wasActiveOnPress) {
+            activateWindow();
+            raise();
+        }
+
         event->accept();
         return;
     }
@@ -374,13 +406,15 @@ void MainWindow::mousePressEvent(QMouseEvent* event) {
 }
 
 void MainWindow::mouseMoveEvent(QMouseEvent* event) {
-    // Show overlay immediately on hover
+    // Show overlay immediately on mouse movement
     m_overlay->showOverlay();
+    m_overlay->raise();
+    setCursor(Qt::ArrowCursor);
 
-    if (m_isFullscreen) {
-        setCursor(Qt::ArrowCursor);
-        m_cursorTimer->start(2500);
-    } else {
+    // Reset 5s inactivity timer
+    m_osdTimer->start(5000);
+
+    if (!m_isFullscreen) {
         Qt::Edges edges = hitTestEdges(event->pos());
         updateCursorForEdges(edges);
 
@@ -400,8 +434,8 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
 
 void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        // Single-click toggles play/pause if not dragging
-        if (!m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
+        // Only toggle play/pause if window was already active/in focus when clicked
+        if (m_wasActiveOnPress && !m_draggingWindow && (event->pos() - m_pressPos).manhattanLength() <= 6) {
             m_player->togglePlayPause();
             event->accept();
             return;
@@ -412,42 +446,61 @@ void MainWindow::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void MainWindow::mouseDoubleClickEvent(QMouseEvent* event) {
-    // Single click already handles play/pause, ignore double click to prevent double toggle
+    // Single click handles play/pause, ignore double click to prevent double toggle
     event->accept();
 }
 
 void MainWindow::wheelEvent(QWheelEvent* event) {
-    QPoint numPixels = event->pixelDelta();
-    QPoint numDegrees = event->angleDelta() / 8;
-    int delta = !numDegrees.isNull() ? numDegrees.y() : numPixels.y();
-
-    if (delta == 0) {
-        event->ignore();
-        return;
-    }
+    int dx = !event->angleDelta().isNull() ? event->angleDelta().x() : event->pixelDelta().x();
+    int dy = !event->angleDelta().isNull() ? event->angleDelta().y() : event->pixelDelta().y();
 
     Qt::KeyboardModifiers mods = event->modifiers();
 
-    if (mods & Qt::ControlModifier) {
-        // Ctrl + Wheel: Volume adjustment (+/- 5%)
-        int step = (delta > 0) ? 5 : -5;
-        int newVol = std::clamp(m_player->volume() + step, 0, 100);
-        m_player->setVolume(newVol);
-        m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
-    } else if (mods & Qt::ShiftModifier) {
-        // Shift + Wheel: Seek +/- 30s
-        double seekAmount = (delta > 0) ? 30.0 : -30.0;
-        m_player->seekRelative(seekAmount);
-        m_overlay->showOsd((delta > 0) ? QStringLiteral("+30s") : QStringLiteral("-30s"));
-    } else {
-        // Regular Wheel: Seek +/- 10s
-        double seekAmount = (delta > 0) ? 10.0 : -10.0;
-        m_player->seekRelative(seekAmount);
-        m_overlay->showOsd((delta > 0) ? QStringLiteral("+10s") : QStringLiteral("-10s"));
+    // 1. Horizontal scrubbing (Mac trackpad two-finger swipe right/left)
+    if (std::abs(dx) > std::abs(dy) && dx != 0) {
+        m_accumulatedScrollX += dx;
+        m_scrollResetTimer->start(250);
+
+        if (std::abs(m_accumulatedScrollX) >= 40) {
+            // Dragging right (positive delta) -> scrub forward
+            // Dragging left (negative delta) -> scrub backward
+            double seekAmount = (m_accumulatedScrollX > 0) ? (mods & Qt::ShiftModifier ? 30.0 : 10.0)
+                                                           : (mods & Qt::ShiftModifier ? -30.0 : -10.0);
+            m_player->seekRelative(seekAmount);
+            m_overlay->showOsd((seekAmount > 0) ? QStringLiteral("+%1s").arg(static_cast<int>(seekAmount))
+                                                : QStringLiteral("%1s").arg(static_cast<int>(seekAmount)));
+            m_accumulatedScrollX = 0;
+        }
+
+        m_overlay->showOverlay();
+        m_overlay->raise();
+        m_osdTimer->start(5000);
+        event->accept();
+        return;
     }
 
-    m_overlay->showOverlay();
-    event->accept();
+    // 2. Vertical scroll (mouse wheel / trackpad vertical)
+    if (dy != 0) {
+        if (mods & Qt::ControlModifier) {
+            // Ctrl + Wheel: Volume adjustment (+/- 5%)
+            int step = (dy > 0) ? 5 : -5;
+            int newVol = std::clamp(m_player->volume() + step, 0, 100);
+            m_player->setVolume(newVol);
+            m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
+        } else {
+            // Vertical wheel seeking
+            double seekAmount = (dy > 0) ? (mods & Qt::ShiftModifier ? 30.0 : 10.0)
+                                         : (mods & Qt::ShiftModifier ? -30.0 : -10.0);
+            m_player->seekRelative(seekAmount);
+            m_overlay->showOsd((seekAmount > 0) ? QStringLiteral("+%1s").arg(static_cast<int>(seekAmount))
+                                                : QStringLiteral("%1s").arg(static_cast<int>(seekAmount)));
+        }
+
+        m_overlay->showOverlay();
+        m_overlay->raise();
+        m_osdTimer->start(5000);
+        event->accept();
+    }
 }
 
 void MainWindow::contextMenuEvent(QContextMenuEvent* event) {
@@ -456,9 +509,12 @@ void MainWindow::contextMenuEvent(QContextMenuEvent* event) {
 
 void MainWindow::enterEvent(QEnterEvent* /*event*/) {
     m_overlay->showOverlay();
+    m_overlay->raise();
+    m_osdTimer->start(5000);
 }
 
 void MainWindow::leaveEvent(QEvent* /*event*/) {
+    m_osdTimer->stop();
     m_overlay->hideOverlay();
 }
 
@@ -485,7 +541,7 @@ void MainWindow::dropEvent(QDropEvent* event) {
             if (url.isLocalFile()) {
                 QString localPath = url.toLocalFile();
                 if (FormatRegistry::instance().isSupported(localPath)) {
-                    openFile(localPath);
+                    openFile(localPath); // Automatically starts playing
                     event->acceptProposedAction();
                     return;
                 }
@@ -531,13 +587,19 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         int newVol = std::clamp(m_player->volume() + 5, 0, 100);
         m_player->setVolume(newVol);
         m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
-        break;
+        m_overlay->showOverlay();
+        m_osdTimer->start(5000);
+        event->accept();
+        return;
     }
     case Qt::Key_Down: {
         int newVol = std::clamp(m_player->volume() - 5, 0, 100);
         m_player->setVolume(newVol);
         m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
-        break;
+        m_overlay->showOverlay();
+        m_osdTimer->start(5000);
+        event->accept();
+        return;
     }
     case Qt::Key_M:
         m_player->toggleMute();
@@ -558,6 +620,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         return;
     }
     m_overlay->showOverlay();
+    m_osdTimer->start(5000);
 }
 
 void MainWindow::showFileAssociationsDialog() {

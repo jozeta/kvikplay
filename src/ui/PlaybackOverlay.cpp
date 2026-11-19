@@ -16,6 +16,7 @@ TimelineSlider::TimelineSlider(QWidget* parent)
     : QSlider(Qt::Horizontal, parent) {
     setRange(0, 10000);
     setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::NoFocus);
     setStyleSheet(QStringLiteral(
         "QSlider::groove:horizontal {"
         "  height: 4px;"
@@ -165,6 +166,7 @@ void PlaybackOverlay::setupUi() {
     // 2. Close Button (top-right)
     m_closeButton->setFixedSize(34, 34);
     m_closeButton->setCursor(Qt::PointingHandCursor);
+    m_closeButton->setFocusPolicy(Qt::NoFocus);
     m_closeButton->setIcon(QIcon(QStringLiteral(":/icons/close.svg")));
     m_closeButton->setIconSize(QSize(16, 16));
     m_closeButton->setStyleSheet(buttonStyle.arg(17));
@@ -173,9 +175,10 @@ void PlaybackOverlay::setupUi() {
     // 3. Timeline row (timeline slider + time display on right)
     auto* timelineLayout = new QHBoxLayout(m_timelineContainer);
     timelineLayout->setContentsMargins(0, 0, 0, 0);
-    timelineLayout->setSpacing(12);
+    timelineLayout->setSpacing(14);
 
     m_timeLabel->setCursor(Qt::PointingHandCursor);
+    m_timeLabel->setFocusPolicy(Qt::NoFocus);
     m_timeLabel->setStyleSheet(QStringLiteral(
         "QPushButton {"
         "  color: #ffffff;"
@@ -208,6 +211,7 @@ void PlaybackOverlay::setupUi() {
 
     m_seekBackBtn->setFixedSize(40, 40);
     m_seekBackBtn->setCursor(Qt::PointingHandCursor);
+    m_seekBackBtn->setFocusPolicy(Qt::NoFocus);
     m_seekBackBtn->setIcon(QIcon(QStringLiteral(":/icons/seek_backward.svg")));
     m_seekBackBtn->setIconSize(QSize(20, 20));
     m_seekBackBtn->setStyleSheet(buttonStyle.arg(20));
@@ -215,6 +219,7 @@ void PlaybackOverlay::setupUi() {
 
     m_playPauseBtn->setFixedSize(52, 52);
     m_playPauseBtn->setCursor(Qt::PointingHandCursor);
+    m_playPauseBtn->setFocusPolicy(Qt::NoFocus);
     m_playPauseBtn->setIcon(QIcon(QStringLiteral(":/icons/play.svg")));
     m_playPauseBtn->setIconSize(QSize(26, 26));
     m_playPauseBtn->setStyleSheet(buttonStyle.arg(26));
@@ -222,6 +227,7 @@ void PlaybackOverlay::setupUi() {
 
     m_seekFwdBtn->setFixedSize(40, 40);
     m_seekFwdBtn->setCursor(Qt::PointingHandCursor);
+    m_seekFwdBtn->setFocusPolicy(Qt::NoFocus);
     m_seekFwdBtn->setIcon(QIcon(QStringLiteral(":/icons/seek_forward.svg")));
     m_seekFwdBtn->setIconSize(QSize(20, 20));
     m_seekFwdBtn->setStyleSheet(buttonStyle.arg(20));
@@ -335,7 +341,7 @@ void PlaybackOverlay::resizeEvent(QResizeEvent* /*event*/) {
 }
 
 void PlaybackOverlay::positionControls() {
-    const int margin = 16;
+    const int margin = 20;
 
     // Top-left filename label
     m_filenameLabel->move(margin, margin);
@@ -343,20 +349,21 @@ void PlaybackOverlay::positionControls() {
     // Top-right close button
     m_closeButton->move(width() - m_closeButton->width() - margin, margin);
 
-    // Timeline row across lower area
-    int timelineH = 24;
-    int timelineY = height() - 76;
-    m_timelineContainer->setGeometry(margin, timelineY, width() - (margin * 2), timelineH);
-
-    // Center bottom playback controls
+    // Bottom center controls
     int centerW = m_controlsContainer->width();
     int centerH = m_controlsContainer->height();
-    m_controlsContainer->move((width() - centerW) / 2, height() - centerH - 10);
+    int controlsY = height() - centerH - 14;
+    m_controlsContainer->move((width() - centerW) / 2, controlsY);
+
+    // Timeline row across lower area - with generous 16px space above the controls
+    int timelineH = 24;
+    int timelineY = controlsY - timelineH - 16;
+    m_timelineContainer->setGeometry(margin, timelineY, width() - (margin * 2), timelineH);
 
     // Bottom right volume control
     int volW = m_volumeControl->width();
     int volH = m_volumeControl->height();
-    m_volumeControl->move(width() - volW - margin, height() - volH - 6);
+    m_volumeControl->move(width() - volW - margin, height() - volH - 10);
 }
 
 } // namespace kvikplay

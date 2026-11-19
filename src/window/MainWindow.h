@@ -66,7 +66,7 @@ private slots:
     void setAlwaysOnTop(bool top);
     void showFileAssociationsDialog();
     void showAboutDialog();
-    void onCursorInactivityTimeout();
+    void onOsdInactivityTimeout();
     void applyWindowScale(double scale);
 
 private:
@@ -82,9 +82,12 @@ private:
     PlaybackOverlay* m_overlay{nullptr};
     ContextMenu* m_contextMenu{nullptr};
 
-    QTimer* m_cursorTimer{nullptr};
+    QTimer* m_osdTimer{nullptr};
+    QTimer* m_scrollResetTimer{nullptr};
     QRect m_normalGeometry;
     QPoint m_pressPos;
+    int m_accumulatedScrollX{0};
+    bool m_wasActiveOnPress{false};
     bool m_draggingWindow{false};
     bool m_isFullscreen{false};
     bool m_isAlwaysOnTop{false};

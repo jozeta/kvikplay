@@ -12,13 +12,15 @@ VideoRenderer::VideoRenderer(QWidget* parent)
 }
 
 VideoRenderer::~VideoRenderer() {
-    makeCurrent();
-    if (m_mpv_gl) {
-        mpv_render_context_set_update_callback(m_mpv_gl, nullptr, nullptr);
-        mpv_render_context_free(m_mpv_gl);
-        m_mpv_gl = nullptr;
+    if (isValid()) {
+        makeCurrent();
+        if (m_mpv_gl) {
+            mpv_render_context_set_update_callback(m_mpv_gl, nullptr, nullptr);
+            mpv_render_context_free(m_mpv_gl);
+            m_mpv_gl = nullptr;
+        }
+        doneCurrent();
     }
-    doneCurrent();
 }
 
 void VideoRenderer::setMpvHandle(mpv_handle* mpv) {
