@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Kvikplay VERSION 1.2.0 LANGUAGES C CXX)
+project(Kvikplay VERSION 1.2.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -373,6 +373,21 @@ if(APPLE)
     )
 endif()
 add_test(NAME test_platform COMMAND test_platform)
+
+if(APPLE)
+    add_executable(test_hover_tracking
+        tests/TestHoverTracking.mm
+        src/platform/PlatformIntegration.h
+        src/platform/macos/MacOSIntegration.h
+        src/platform/macos/MacOSIntegration.mm
+        src/formats/FormatRegistry.h
+        src/formats/FormatRegistry.cpp
+    )
+    target_include_directories(test_hover_tracking PRIVATE src)
+    target_link_libraries(test_hover_tracking PRIVATE Qt6::Widgets
+        ${COCOA_LIBRARY} ${CORESERVICES_LIBRARY} ${IOKIT_LIBRARY} ${MEDIAPLAYER_LIBRARY})
+    add_test(NAME test_hover_tracking COMMAND test_hover_tracking)
+endif()
 
 add_test(NAME test_version_consistency
     COMMAND ${CMAKE_COMMAND} -DVERSION=${PROJECT_VERSION} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}

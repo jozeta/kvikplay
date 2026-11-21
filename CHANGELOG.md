@@ -4,7 +4,14 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+## 1.2.1 — 2026-11-21
+
 ### Fixed
+- **macOS crash (1.1.0 and 1.2.0):** the app aborted when the pointer left its window, for
+  example when the "Update available" dialog opened. The hover tracker that shows the controls
+  while Kvikplay is in the background had no handler for "mouse exited". Regression test:
+  `test_hover_tracking`. Kvikplay 1.1.0 can't install this update itself (it crashes at the
+  dialog): download 1.2.1 from the release page.
 - The media inspector opened over the title; it now sits below it, on the overlay's margin.
 - A file without a metadata title showed its name twice ("movie" over "movie.mkv"); the second
   line now only appears when it adds something.

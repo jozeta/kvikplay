@@ -14,7 +14,10 @@
 
 // Receives mouse movement from an NSTrackingArea that is active even while another
 // app is in front (Qt's own tracking only reports it for the active app).
-@interface KvikplayHoverTarget : NSObject {
+// An NSResponder, so every mouse event AppKit sends to a tracking-area owner has a
+// handler: a plain NSObject without mouseExited: crashed the app ("unrecognized
+// selector") whenever the pointer left the window, e.g. when a dialog opened (1.1.0-1.2.0).
+@interface KvikplayHoverTarget : NSResponder {
 @public
     std::function<void()> onHover;
 }
@@ -27,6 +30,9 @@
 }
 - (void)mouseEntered:(NSEvent*)event {
     [self mouseMoved:event];
+}
+- (void)mouseExited:(NSEvent*)event {
+    (void)event; // nothing to do: the overlay hides on its own timer
 }
 @end
 
