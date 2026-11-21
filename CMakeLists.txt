@@ -360,6 +360,8 @@ add_executable(test_platform
     tests/TestPlatform.cpp
     src/platform/PlatformIntegration.h
     src/platform/PlatformIntegration.cpp
+    src/formats/FormatRegistry.h
+    src/formats/FormatRegistry.cpp
     ${PLATFORM_SOURCES}
 )
 target_include_directories(test_platform PRIVATE src)
