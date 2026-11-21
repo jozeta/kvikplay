@@ -43,6 +43,19 @@ if [ -f "$APP_PATH/Contents/Frameworks/QtDBus.framework/Versions/A/QtDBus" ]; th
     install_name_tool -id @rpath/QtDBus.framework/Versions/A/QtDBus "$APP_PATH/Contents/Frameworks/QtDBus.framework/Versions/A/QtDBus" 2>/dev/null || true
 fi
 
+# Remove library search paths that point outside the bundle (e.g. /opt/homebrew/lib):
+# a standalone app must only load its own copies.
+while IFS= read -r -d '' f; do
+    if file -b "$f" | grep -q "Mach-O"; then
+        otool -l "$f" | awk '/LC_RPATH/{getline; getline; print $2}' | while read -r rp; do
+            case "$rp" in
+                @*) ;; # @executable_path / @loader_path / @rpath: inside the bundle
+                *) install_name_tool -delete_rpath "$rp" "$f" 2>/dev/null || true ;;
+            esac
+        done
+    fi
+done < <(find "$APP_PATH" -type f -print0)
+
 # Ad-hoc code signing for the bundled frameworks and binary
 echo "[Standalone Deploy] Signing bundle with ad-hoc signature..."
 codesign --force --deep -s - "$APP_PATH"

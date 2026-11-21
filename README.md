@@ -125,11 +125,12 @@ has not yet been run by hand on a Windows PC.
 
 ### macOS (11 Big Sur or later)
 
-1. Build the app (see [Building from source](#building-from-source)). The build produces a
-   self-contained `build/kvikplay.app`, with Qt, libmpv and FFmpeg bundled inside.
-2. Drag `kvikplay.app` into `/Applications`.
-3. The app is signed ad hoc only, so the first time you open it, right-click it → **Open**, then
-   confirm.
+1. Get `Kvikplay-<version>-macOS-arm64.zip` (Apple silicon), or build it yourself (see
+   [Building from source](#building-from-source) and [Releasing](#releasing-macos)).
+2. Unzip it and drag `kvikplay.app` into `/Applications`.
+3. Open it. The release build is signed with a Developer ID and notarized by Apple, so macOS
+   opens it without warnings. (A local build without signing is signed ad hoc only: the first
+   time, right-click it → **Open** and confirm.)
 
 ### Windows (10 or 11, 64-bit)
 
@@ -326,6 +327,20 @@ ctest --test-dir build --output-on-failure
 The tests use a `CHECK()` macro that works in every build type, run from the source folder (the
 sample clips are in `test_media/`) and use a temporary settings folder. CI runs them on macOS and
 Windows for every push.
+
+### Releasing (macOS)
+
+```bash
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release --target kvikplay      # standalone app, ad-hoc signed
+scripts/sign_notarize_macos.sh                     # Developer ID + Hardened Runtime, notarize, staple
+```
+
+The script signs every bundled library inside out, submits the app to Apple's notary service,
+staples the ticket, checks it with Gatekeeper and writes
+`build-release/Kvikplay-<version>-macOS-arm64.zip`. It needs a "Developer ID Application"
+certificate in the keychain (`CODESIGN_IDENTITY` to choose one) and a notarytool keychain
+profile (`KVIKPLAY_NOTARY_PROFILE`, default `LadaNotary`).
 
 ### Run
 

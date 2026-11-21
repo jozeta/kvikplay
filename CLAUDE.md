@@ -25,6 +25,10 @@ cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug -DKVIKPLAY_STANDALONE=OFF
 cmake --build build-debug -j8
 ctest --test-dir build-debug --output-on-failure
 
+# Signed + notarized macOS release (Developer ID, Hardened Runtime, no entitlements needed)
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release && cmake --build build-release --target kvikplay
+scripts/sign_notarize_macos.sh                # -> build-release/Kvikplay-<version>-macOS-arm64.zip
+
 # Run
 open build/kvikplay.app                       # macOS
 ./build/kvikplay.app/Contents/MacOS/kvikplay file.mkv

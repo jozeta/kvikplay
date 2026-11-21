@@ -14,6 +14,9 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
   macOS Now Playing.
 - Version in the About box and `kvikplay --version`; one version number from CMake.
 - `KVIKPLAY_CONFIG_DIR` to use another settings folder.
+- macOS release script: Developer ID signing with Hardened Runtime, notarization, stapling
+  (`scripts/sign_notarize_macos.sh`). The standalone bundle no longer keeps library search
+  paths that point outside the app (`/opt/homebrew/lib`).
 - CI on macOS and Windows (build, tests, ShellCheck, clang-tidy) and security scanning.
 - Screen-reader names and tooltips on the overlay controls.
 
