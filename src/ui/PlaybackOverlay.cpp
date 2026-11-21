@@ -1,6 +1,7 @@
 #include "PlaybackOverlay.h"
 #include "TimeFormat.h"
 #include <QDateTime>
+#include <QFileInfo>
 #include <QIcon>
 #include <QLinearGradient>
 #include <QMouseEvent>
@@ -300,9 +301,8 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
 
 void PlaybackOverlay::setTitle(const QString& title, const QString& fileName) {
     m_titleLabel->setText(title.isEmpty() ? fileName : title);
-    // The file name as a second line only when it adds something.
     m_fileLabel->setText(fileName);
-    m_fileLabel->setVisible(!fileName.isEmpty() && fileName != m_titleLabel->text() && height() >= 300);
+    m_fileLabel->setVisible(fileLineAddsSomething());
     m_titleLabel->adjustSize();
     m_fileLabel->adjustSize();
 }
@@ -328,6 +328,14 @@ void PlaybackOverlay::setDuration(double seconds) {
 void PlaybackOverlay::setChapters(const std::vector<ChapterInfo>& chapters) {
     m_chapters = chapters;
     m_timelineSlider->setChapters(chapters);
+}
+
+bool PlaybackOverlay::fileLineAddsSomething() const {
+    // The file name as a second line only when it says more than the title (a metadata
+    // title such as "Big Buck Bunny"), not "movie" over "movie.mkv".
+    const QString file = m_fileLabel->text();
+    const QString title = m_titleLabel->text();
+    return !file.isEmpty() && file != title && QFileInfo(file).completeBaseName() != title && height() >= 300;
 }
 
 QString PlaybackOverlay::chapterAt(double seconds) const {
@@ -475,7 +483,7 @@ void PlaybackOverlay::positionControls() {
     m_titleLabel->setMaximumWidth(std::max(80, w - 2 * m - 60));
     m_fileLabel->move(m, 20 + m_titleLabel->sizeHint().height() + 2);
     m_fileLabel->setMaximumWidth(std::max(80, w - 2 * m - 60));
-    m_fileLabel->setVisible(!m_fileLabel->text().isEmpty() && m_fileLabel->text() != m_titleLabel->text() && h >= 300);
+    m_fileLabel->setVisible(fileLineAddsSomething());
     m_closeButton->move(w - m + 10 - m_closeButton->width(), 10);
 
     // Bottom row of buttons.

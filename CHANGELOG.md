@@ -4,6 +4,11 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+### Fixed
+- The media inspector opened over the title; it now sits below it, on the overlay's margin.
+- A file without a metadata title showed its name twice ("movie" over "movie.mkv"); the second
+  line now only appears when it adds something.
+
 ## 1.2.0 — 2026-11-21
 
 ### Changed

@@ -114,6 +114,7 @@ private:
     void positionControls();
     void updateTimeLabels();
     QString chapterAt(double seconds) const;
+    bool fileLineAddsSomething() const;
 
     QLabel* m_titleLabel{nullptr};
     QLabel* m_fileLabel{nullptr};

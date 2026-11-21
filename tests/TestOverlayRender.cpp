@@ -97,6 +97,15 @@ int main(int argc, char* argv[]) {
     const QRect glyph = playPause->geometry().adjusted(14, 14, -14, -14);
     CHECK(meanLuma(shown, glyph) > meanLuma(shown, glyph.translated(400, 0)) + 20); // vs. empty scrim in the same row
 
+    std::cout << "[TestOverlayRender] No second line when it only repeats the title..." << std::endl;
+    overlay->setTitle(QStringLiteral("big_buck_bunny_1080p_h264"), QStringLiteral("big_buck_bunny_1080p_h264.mov"));
+    pump(50);
+    int visibleNameLines = 0;
+    for (QLabel* l : overlay->findChildren<QLabel*>())
+        if (l->isVisible() && l->text().startsWith(QStringLiteral("big_buck_bunny"))) ++visibleNameLines;
+    CHECK(visibleNameLines == 1);
+    overlay->setTitle(QStringLiteral("Big Buck Bunny"), QStringLiteral("big_buck_bunny_1080p_h264.mov"));
+
     std::cout << "[TestOverlayRender] Volume ring in the centre..." << std::endl;
     overlay->showVolumeLevel(75, false);
     pump(300);

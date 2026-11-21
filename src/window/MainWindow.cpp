@@ -639,7 +639,8 @@ void MainWindow::toggleMediaInspector() {
     if (!m_inspector) return;
     m_inspector->toggleInspector();
     if (m_inspector->isVisible()) {
-        m_inspector->move(20, 60); // below the file-name tag
+        // Below the title block, on the overlay's left margin.
+        m_inspector->move(width() < 600 ? 16 : 28, 84);
         m_inspector->updateStats(m_player->streamStats());
         m_inspectorTimer->start();
     } else {
