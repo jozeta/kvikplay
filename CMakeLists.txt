@@ -42,6 +42,19 @@ qt_standard_project_setup()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MPV REQUIRED IMPORTED_TARGET mpv)
 
+# MSYS2: some .pc files of mpv's dependencies hard-code MSYS paths such as /ucrt64/include,
+# which a native CMake can't resolve. Keep only include directories that exist.
+get_target_property(_mpv_incs PkgConfig::MPV INTERFACE_INCLUDE_DIRECTORIES)
+if(_mpv_incs)
+    set(_mpv_existing "")
+    foreach(_dir IN LISTS _mpv_incs)
+        if(EXISTS "${_dir}")
+            list(APPEND _mpv_existing "${_dir}")
+        endif()
+    endforeach()
+    set_target_properties(PkgConfig::MPV PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${_mpv_existing}")
+endif()
+
 set(KVIKPLAY_SOURCES
     src/main.cpp
     src/app/Application.h
