@@ -1,14 +1,26 @@
 #include "ThumbnailWorker.h"
+#include "MpvOptions.h"
+#include "formats/FormatRegistry.h"
 #include <QDebug>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <string_view>
 
 namespace kvikplay {
+
+namespace {
+using Clock = std::chrono::steady_clock;
+
+double msSince(Clock::time_point t0) {
+    return std::chrono::duration<double, std::milli>(Clock::now() - t0).count();
+}
+} // namespace
 
 ThumbnailWorker::ThumbnailWorker(QObject* parent)
     : QThread(parent)
     , m_cache(120) { // Keep up to 120 thumbnail frames (~6MB total)
-    start();
+    start(QThread::LowPriority); // never compete with the main player for CPU
 }
 
 ThumbnailWorker::~ThumbnailWorker() {
@@ -17,11 +29,14 @@ ThumbnailWorker::~ThumbnailWorker() {
 
 void ThumbnailWorker::openFile(const QString& filePath) {
     QMutexLocker locker(&m_mutex);
-    m_pendingFile = filePath;
+    // Only formats Kvikplay plays (same rule as MediaPlayer::openMedia).
+    m_pendingFile = FormatRegistry::instance().isSupported(filePath) ? filePath : QString();
     m_hasNewFile = true;
     m_requestedTime = -1.0;
     m_hasRequest = false;
-    m_cond.wakeOne();
+    m_cache.clear();
+    // No wake-up: the file is only opened when the first thumbnail is requested,
+    // so opening a video never competes with the main player's startup.
 }
 
 void ThumbnailWorker::requestThumbnail(double timestamp) {
@@ -52,13 +67,21 @@ void ThumbnailWorker::initMpv() {
     m_mpv = mpv_create();
     if (!m_mpv) return;
 
+    applyBaseMpvOptions(m_mpv);
     mpv_set_option_string(m_mpv, "vo", "libmpv");
     mpv_set_option_string(m_mpv, "ao", "null");
     mpv_set_option_string(m_mpv, "audio", "no");
     mpv_set_option_string(m_mpv, "sub", "no");
+    mpv_set_option_string(m_mpv, "sub-auto", "no");
     mpv_set_option_string(m_mpv, "pause", "yes");
+    mpv_set_option_string(m_mpv, "keep-open", "yes");
+    mpv_set_option_string(m_mpv, "idle", "yes");
     mpv_set_option_string(m_mpv, "hr-seek", "no");
     mpv_set_option_string(m_mpv, "demuxer-readahead-secs", "0");
+    mpv_set_option_string(m_mpv, "cache", "no");
+    // Hardware decode with copy-back (the software renderer needs frames in RAM):
+    // VideoToolbox-copy on macOS, d3d11va-copy on Windows; software if none works.
+    mpv_set_option_string(m_mpv, "hwdec", "auto-copy-safe");
     mpv_set_option_string(m_mpv, "vd-lavc-skiploopfilter", "all");
     mpv_set_option_string(m_mpv, "vd-lavc-fast", "yes");
     mpv_set_option_string(m_mpv, "vd-lavc-threads", "2");
@@ -93,33 +116,85 @@ void ThumbnailWorker::cleanupMpv() {
     }
 }
 
+bool ThumbnailWorker::waitForEvent(mpv_event_id wanted, double timeoutMs) {
+    const auto t0 = Clock::now();
+    while (m_running.load()) {
+        const double left = timeoutMs - msSince(t0);
+        if (left <= 0.0) return false;
+        mpv_event* ev = mpv_wait_event(m_mpv, std::min(left, 50.0) / 1000.0);
+        if (ev->event_id == wanted) return true;
+        if (ev->event_id == MPV_EVENT_END_FILE) {
+            auto* end = static_cast<mpv_event_end_file*>(ev->data);
+            if (end && end->reason == MPV_END_FILE_REASON_ERROR) return false;
+        }
+        if (ev->event_id == MPV_EVENT_SHUTDOWN) return false;
+    }
+    return false;
+}
+
+bool ThumbnailWorker::waitForFrame(double timeoutMs) {
+    const auto t0 = Clock::now();
+    while (m_running.load() && msSince(t0) < timeoutMs) {
+        if (mpv_render_context_update(m_rc) & MPV_RENDER_UPDATE_FRAME) return true;
+        mpv_wait_event(m_mpv, 0.005); // drain events while the frame is prepared
+    }
+    return false;
+}
+
+bool ThumbnailWorker::loadFile(const QString& file) {
+    m_fileHasVideo = false;
+    m_aspectRatio = 16.0 / 9.0;
+    if (!m_mpv || file.isEmpty()) return false;
+
+    QByteArray fileUtf8 = file.toUtf8();
+    const char* cmd[] = {"loadfile", fileUtf8.constData(), nullptr};
+    if (mpv_command(m_mpv, cmd) < 0) return false;
+
+    // FILE_LOADED: tracks known. PLAYBACK_RESTART: first frame decoded, so
+    // video-params (incl. the display aspect) are valid for *this* file.
+    if (!waitForEvent(MPV_EVENT_FILE_LOADED, 3000.0)) return false;
+
+    int hasVideo = 0;
+    char* vid = mpv_get_property_string(m_mpv, "vid");
+    if (vid) {
+        hasVideo = (std::string_view(vid) != "no" && std::string_view(vid) != "auto") ? 1 : 0;
+        mpv_free(vid);
+    }
+    if (!hasVideo) return false; // audio-only: never produce thumbnails
+
+    if (!waitForEvent(MPV_EVENT_PLAYBACK_RESTART, 3000.0)) return false;
+
+    double dar = 0.0;
+    if (mpv_get_property(m_mpv, "video-params/aspect", MPV_FORMAT_DOUBLE, &dar) >= 0 && dar > 0.05) {
+        m_aspectRatio = dar;
+    }
+    m_fileHasVideo = true;
+    return true;
+}
+
 bool ThumbnailWorker::renderFrame(double timestamp, QImage& outImage) {
-    if (!m_mpv || !m_rc) return false;
+    if (!m_mpv || !m_rc || !m_fileHasVideo) return false;
 
     QByteArray timeStr = QByteArray::number(timestamp, 'f', 2);
     const char* seekCmd[] = {"seek", timeStr.constData(), "absolute+keyframes", nullptr};
-    mpv_command(m_mpv, seekCmd);
+    if (mpv_command(m_mpv, seekCmd) < 0) return false;
 
-    for (int i = 0; i < 15 && m_running.load(); ++i) {
-        mpv_event* ev = mpv_wait_event(m_mpv, 0.01);
-        if (ev->event_id == MPV_EVENT_NONE) {
-            uint64_t flags = mpv_render_context_update(m_rc);
-            if (flags & MPV_RENDER_UPDATE_FRAME) break;
-        }
-    }
+    // Only render once the seek has finished and a new frame is ready; otherwise we
+    // would grab (and cache) the previous frame or an empty buffer.
+    if (!waitForEvent(MPV_EVENT_PLAYBACK_RESTART, 2000.0)) return false;
+    if (!waitForFrame(500.0)) return false;
 
     int w = 160;
     int h = 90;
     if (m_aspectRatio >= (16.0 / 9.0)) {
-        w = 160;
         h = static_cast<int>(std::round(160.0 / m_aspectRatio));
-    } else if (m_aspectRatio > 0.05) {
-        h = 90;
+    } else {
         w = static_cast<int>(std::round(90.0 * m_aspectRatio));
     }
-    w = std::clamp(w, 32, 160);
-    h = std::clamp(h, 32, 90);
+    w = std::clamp(w, 16, 160);
+    h = std::clamp(h, 16, 90);
     outImage = QImage(w, h, QImage::Format_RGB32);
+    outImage.fill(Qt::black);
     size_t stride = outImage.bytesPerLine();
     int size[2] = {w, h};
     char fmt[] = "bgr0";
@@ -132,8 +207,7 @@ bool ThumbnailWorker::renderFrame(double timestamp, QImage& outImage) {
         {MPV_RENDER_PARAM_INVALID, nullptr}
     };
 
-    int err = mpv_render_context_render(m_rc, rparams);
-    return (err >= 0);
+    return mpv_render_context_render(m_rc, rparams) >= 0;
 }
 
 void ThumbnailWorker::run() {
@@ -143,11 +217,10 @@ void ThumbnailWorker::run() {
         QString fileToLoad;
         bool loadNeeded = false;
         double timeToRender = -1.0;
-        bool renderNeeded = false;
 
         {
             QMutexLocker locker(&m_mutex);
-            while (m_running.load() && !m_hasNewFile && !m_hasRequest) {
+            while (m_running.load() && !m_hasRequest) {
                 m_cond.wait(&m_mutex);
             }
             if (!m_running.load()) break;
@@ -156,48 +229,24 @@ void ThumbnailWorker::run() {
                 fileToLoad = m_pendingFile;
                 m_hasNewFile = false;
                 loadNeeded = true;
-                m_cache.clear();
             }
-            if (m_hasRequest) {
-                timeToRender = m_requestedTime;
-                m_hasRequest = false;
-                renderNeeded = true;
-            }
+            timeToRender = m_requestedTime;
+            m_hasRequest = false;
         }
 
-        if (loadNeeded && m_mpv && !fileToLoad.isEmpty()) {
-            QByteArray fileUtf8 = fileToLoad.toUtf8();
-            const char* cmd[] = {"loadfile", fileUtf8.constData(), nullptr};
-            mpv_command(m_mpv, cmd);
-
-            for (int i = 0; i < 60 && m_running.load(); ++i) {
-                mpv_event* ev = mpv_wait_event(m_mpv, 0.05);
-                if (ev->event_id == MPV_EVENT_FILE_LOADED) break;
-            }
-
-            double dar = 0.0;
-            if (mpv_get_property(m_mpv, "video-params/aspect", MPV_FORMAT_DOUBLE, &dar) >= 0 && dar > 0.05) {
-                m_aspectRatio = dar;
-            } else {
-                int64_t vidW = 0, vidH = 0;
-                mpv_get_property(m_mpv, "video-params/w", MPV_FORMAT_INT64, &vidW);
-                mpv_get_property(m_mpv, "video-params/h", MPV_FORMAT_INT64, &vidH);
-                if (vidW > 0 && vidH > 0) {
-                    m_aspectRatio = static_cast<double>(vidW) / vidH;
-                }
-            }
+        if (loadNeeded) {
+            loadFile(fileToLoad);
         }
 
-        if (renderNeeded && m_rc && timeToRender >= 0.0) {
-            QImage img;
-            if (renderFrame(timeToRender, img)) {
-                int key = static_cast<int>(std::round(timeToRender));
-                {
-                    QMutexLocker locker(&m_mutex);
-                    m_cache.insert(key, new QImage(img));
-                }
-                emit thumbnailReady(timeToRender, img);
+        QImage img;
+        if (timeToRender >= 0.0 && renderFrame(timeToRender, img)) {
+            const int key = static_cast<int>(std::round(timeToRender));
+            {
+                QMutexLocker locker(&m_mutex);
+                if (m_hasNewFile) continue; // a different file was opened meanwhile
+                m_cache.insert(key, new QImage(img));
             }
+            emit thumbnailReady(timeToRender, img);
         }
     }
 

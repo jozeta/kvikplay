@@ -259,6 +259,17 @@ target_include_directories(test_playback PRIVATE src)
 target_link_libraries(test_playback PRIVATE Qt6::Core PkgConfig::MPV)
 add_test(NAME test_playback COMMAND test_playback)
 
+add_executable(test_thumbnails
+    tests/TestThumbnails.cpp
+    src/player/ThumbnailWorker.h
+    src/player/ThumbnailWorker.cpp
+    src/formats/FormatRegistry.h
+    src/formats/FormatRegistry.cpp
+)
+target_include_directories(test_thumbnails PRIVATE src)
+target_link_libraries(test_thumbnails PRIVATE Qt6::Core Qt6::Gui PkgConfig::MPV)
+add_test(NAME test_thumbnails COMMAND test_thumbnails)
+
 add_executable(test_platform
     tests/TestPlatform.cpp
     src/platform/PlatformIntegration.h
@@ -279,7 +290,7 @@ add_test(NAME test_platform COMMAND test_platform)
 
 # Run every test from the source tree (so test_media/ is found from any build
 # folder) and point the settings at a throwaway folder instead of the user's.
-set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_platform)
+set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_thumbnails test_platform)
 set_tests_properties(${KVIKPLAY_TESTS} PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "KVIKPLAY_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-config"

@@ -216,6 +216,35 @@ int main(int argc, char* argv[]) {
         CHECK(player.mediaInfo().filePath != playlist);
     }
 
+    // Security: a playlist renamed to .mp4 passes the extension check, but mpv
+    // detects it by content. Kvikplay must refuse to play whatever it points to.
+    std::cout << "[TestPlayback] Testing disguised playlist rejection..." << std::endl;
+    {
+        QTemporaryDir tmp;
+        const QString target = QFileInfo(findTestMedia(QStringLiteral("test_media/test_4_3.mkv"))).absoluteFilePath();
+        const QString fake = tmp.path() + QStringLiteral("/fake.mp4");
+        QFile f(fake);
+        CHECK(f.open(QIODevice::WriteOnly));
+        f.write("#EXTM3U\n");
+        f.write(target.toUtf8() + "\n");
+        f.close();
+        // Drain events left over from earlier tests before listening.
+        waitFor(app, [] { return false; }, 300);
+        QString err;
+        bool targetLoaded = false;
+        auto c = QObject::connect(&player, &MediaPlayer::errorOccurred, [&](const QString& e) { err = e; });
+        auto c2 = QObject::connect(&player, &MediaPlayer::videoParamsChanged,
+                                   [&](int w, int h, int, int, double) { if (w == 640 && h == 480) targetLoaded = true; });
+        player.openMedia(fake);
+        CHECK(waitFor(app, [&] { return !err.isEmpty(); }, 4000));
+        waitFor(app, [] { return false; }, 500); // give a wrongly followed entry time to load
+        QObject::disconnect(c);
+        QObject::disconnect(c2);
+        std::cout << "  error: " << err.toStdString() << std::endl;
+        CHECK(!targetLoaded);                         // the referenced 4:3 clip never plays
+        CHECK(player.state() != PlaybackState::Playing);
+    }
+
     // Item 3: replay after the end, then pause, must not be stuck in Ended.
     std::cout << "[TestPlayback] Testing replay after end..." << std::endl;
     player.openMedia(findTestMedia(QStringLiteral("test_media/test_16_9.mp4")));

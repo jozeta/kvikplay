@@ -32,7 +32,10 @@ protected:
 private:
     void initMpv();
     void cleanupMpv();
+    bool loadFile(const QString& file);
     bool renderFrame(double timestamp, QImage& outImage);
+    bool waitForEvent(mpv_event_id wanted, double timeoutMs);
+    bool waitForFrame(double timeoutMs);
 
     mpv_handle* m_mpv{nullptr};
     mpv_render_context* m_rc{nullptr};
@@ -47,6 +50,7 @@ private:
     double m_requestedTime{-1.0};
     bool m_hasRequest{false};
     double m_aspectRatio{16.0 / 9.0};
+    bool m_fileHasVideo{false};
 
     QCache<int, QImage> m_cache;
 };
