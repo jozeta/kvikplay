@@ -300,8 +300,9 @@ it:
 
 Before anything is installed the download must match the SHA-256 checksum GitHub publishes for it,
 and on macOS the new app must be signed by the same developer and approved by Gatekeeper. If the
-app's folder isn't writable, or there is no automatic update for your computer yet (for example
-Windows, until a Windows build is published), the download page opens instead.
+app's folder isn't writable, or there is no automatic update for your computer (Windows and Intel
+Macs for now: there is no signed build the installer could verify), the download page opens
+instead.
 
 Turn the check off, or check right now: right-click and hold → **About Kvikplay** → **Check for
 updates when Kvikplay starts** / **Check for Updates…**. The check sends one request to

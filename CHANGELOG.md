@@ -9,7 +9,8 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 ### Added
 - Update check at start: when GitHub has a newer release, Kvikplay offers to download and install
   it (SHA-256 checked; on macOS also signature, Team ID and Gatekeeper checked) and restarts. Can
-  be turned off in About, which also has "Check for Updates…".
+  be turned off in About, which also has "Check for Updates…". On Windows it opens the download
+  page instead of installing (no signed Windows build to verify yet).
 - MIT LICENSE and THIRD_PARTY_NOTICES.md; the app ships the licence texts of every bundled library.
 - Right-click menu: **Opening Files from Finder/Explorer** → Replace Current Video (default) or
   Open in New Window. Drag-and-drop and Open File always replace the current video.

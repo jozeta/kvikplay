@@ -264,38 +264,6 @@ void UpdateManager::installDownloaded(const QString& zipPath, const ReleaseInfo&
         "/usr/bin/open \"$old\"\n");
     const bool started = QProcess::startDetached(QStringLiteral("/bin/sh"),
         {QStringLiteral("-c"), script, QStringLiteral("kvikplay-update"), pid, target, newApp, workDir});
-#elif defined(Q_OS_WIN)
-    const QString installDir = QCoreApplication::applicationDirPath();
-    if (!QFileInfo(installDir).isWritable()) {
-        QDir(workDir).removeRecursively();
-        showError(QStringLiteral("The update can't be installed automatically."),
-                  QStringLiteral("Kvikplay can't write to the folder it is in. "
-                                 "The download page opens so you can install it yourself."));
-        openReleasePage(info);
-        return;
-    }
-    // Runs after Kvikplay has quit: unpack, copy over the install folder, relaunch.
-    const QString ps1 = workDir + QStringLiteral("/install-update.ps1");
-    QFile f(ps1);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        showError(QStringLiteral("The update was not installed."), f.errorString());
-        return;
-    }
-    f.write(
-        "param([int]$ProcId, [string]$Zip, [string]$Dest, [string]$Exe, [string]$Work)\n"
-        "try { Wait-Process -Id $ProcId -Timeout 60 -ErrorAction SilentlyContinue } catch {}\n"
-        "$tmp = Join-Path $Work 'unpacked'\n"
-        "Expand-Archive -LiteralPath $Zip -DestinationPath $tmp -Force\n"
-        "$src = Get-ChildItem -LiteralPath $tmp -Recurse -Filter 'kvikplay.exe' | Select-Object -First 1\n"
-        "if ($src) { Copy-Item -Path (Join-Path $src.DirectoryName '*') -Destination $Dest -Recurse -Force }\n"
-        "Start-Process -FilePath $Exe\n"
-        "Remove-Item -LiteralPath $Work -Recurse -Force -ErrorAction SilentlyContinue\n");
-    f.close();
-    const bool started = QProcess::startDetached(QStringLiteral("powershell.exe"),
-        {QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-         QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"), QStringLiteral("-File"), ps1,
-         QStringLiteral("-ProcId"), pid, QStringLiteral("-Zip"), zipPath, QStringLiteral("-Dest"), installDir,
-         QStringLiteral("-Exe"), QCoreApplication::applicationFilePath(), QStringLiteral("-Work"), workDir});
 #else
     const bool started = false;
 #endif

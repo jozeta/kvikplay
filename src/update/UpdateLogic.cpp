@@ -74,10 +74,9 @@ QString currentPlatformSuffix() {
 #if defined(Q_OS_MACOS)
     return QSysInfo::currentCpuArchitecture() == QStringLiteral("arm64") ? QStringLiteral("macOS-arm64")
                                                                          : QString();
-#elif defined(Q_OS_WIN)
-    return QSysInfo::currentCpuArchitecture() == QStringLiteral("x86_64") ? QStringLiteral("Windows-x64")
-                                                                          : QString();
 #else
+    // Windows: no automatic install until Windows builds are Authenticode-signed and the
+    // installer can verify the signer like on macOS; the download page opens instead.
     return QString();
 #endif
 }

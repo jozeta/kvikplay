@@ -31,7 +31,8 @@ std::optional<ReleaseInfo> parseLatestRelease(const QByteArray& json, const QStr
 // "TeamIdentifier=XXXX" from `codesign -dv` output; empty when absent or "not set".
 QString teamIdentifierFromCodesign(const QString& codesignOutput);
 
-// The asset suffix for the running build, e.g. "macOS-arm64"; empty if none is published.
+// The asset suffix for automatic installs ("macOS-arm64"); empty where updates can't be
+// verified and installed automatically (Windows, Intel Macs): the release page opens instead.
 QString currentPlatformSuffix();
 
 } // namespace kvikplay
