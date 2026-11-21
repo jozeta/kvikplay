@@ -1,0 +1,18 @@
+# QA-LINT-1: C++ linter, run in CI (.github/workflows/ci.yml) against compile_commands.json.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  clang-analyzer-*,
+  performance-*,
+  -performance-enum-size,
+  portability-*,
+  readability-container-size-empty,
+  readability-redundant-string-init
+WarningsAsErrors: >
+  bugprone-use-after-move,
+  bugprone-dangling-handle,
+  clang-analyzer-core.*,
+  clang-analyzer-cplusplus.*
+HeaderFilterRegex: 'src/.*'

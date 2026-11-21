@@ -1,0 +1,63 @@
+# Build and test on both platforms Kvikplay ships for (QA-CI-1, QA-CI-2, QA-LINT-1).
+# Every action is pinned to a commit SHA.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install dependencies
+        run: brew install cmake pkgconf qtbase qtsvg mpv llvm shellcheck
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -DKVIKPLAY_STANDALONE=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Build
+        run: cmake --build build -j4
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: ShellCheck
+        run: shellcheck scripts/*.sh
+      - name: clang-tidy
+        run: |
+          "$(brew --prefix llvm)/bin/clang-tidy" -p build --quiet \
+            $(git ls-files 'src/*.cpp' | grep -v '/windows/')
+
+  windows:
+    # MSYS2 UCRT64 (MinGW) has Qt 6, libmpv and C++/WinRT as packages, which makes
+    # it the simplest way to compile and test every Windows-only code path.
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-mpv
+            mingw-w64-ucrt-x86_64-cppwinrt
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKVIKPLAY_STANDALONE=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

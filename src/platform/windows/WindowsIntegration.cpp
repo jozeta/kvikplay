@@ -13,6 +13,11 @@
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "shell32.lib")
 
+#include <chrono>
+#include <systemmediatransportcontrolsinterop.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Media.h>
+
 #ifndef DWMWA_WINDOW_CORNER_PREFERENCE
 #define DWMWA_WINDOW_CORNER_PREFERENCE 33
 #endif
@@ -27,10 +32,32 @@ enum DWM_WINDOW_CORNER_PREFERENCE {
 
 namespace kvikplay {
 
+#ifdef _WIN32
+struct WindowsIntegration::Smtc {
+    winrt::Windows::Media::SystemMediaTransportControls controls{nullptr};
+    winrt::event_token buttonToken{};
+    winrt::event_token seekToken{};
+};
+#else
+struct WindowsIntegration::Smtc {};
+#endif
+
 double WindowsIntegration::s_aspectRatio = 16.0 / 9.0;
 
 WindowsIntegration::WindowsIntegration() = default;
-WindowsIntegration::~WindowsIntegration() = default;
+
+WindowsIntegration::~WindowsIntegration() {
+#ifdef _WIN32
+    if (m_smtc && m_smtc->controls) {
+        try {
+            m_smtc->controls.ButtonPressed(m_smtc->buttonToken);
+            m_smtc->controls.PlaybackPositionChangeRequested(m_smtc->seekToken);
+            m_smtc->controls.IsEnabled(false);
+        } catch (...) {
+        }
+    }
+#endif
+}
 
 double WindowsIntegration::currentAspectRatio() {
     return s_aspectRatio;
@@ -47,6 +74,7 @@ void WindowsIntegration::setupFramelessWindow(QWidget* widget) {
 #ifdef _WIN32
     HWND hwnd = reinterpret_cast<HWND>(widget->winId());
     if (!hwnd) return;
+    m_hwnd = hwnd; // for System Media Transport Controls
 
     // Enable standard DWM drop shadow for frameless window
     MARGINS margins = {1, 1, 1, 1};
@@ -170,6 +198,130 @@ bool WindowsIntegration::registerFileAssociations(const QStringList& extensions)
 #else
     Q_UNUSED(extensions);
     return false;
+#endif
+}
+
+bool WindowsIntegration::unregisterFileAssociations(const QStringList& extensions) {
+#ifdef _WIN32
+    const auto& registry = FormatRegistry::instance();
+    for (const auto& ext : extensions) {
+        auto fmt = registry.findFormat(ext);
+        if (!fmt) continue;
+        const std::wstring wProgId = fmt->progId.toStdWString();
+        const std::wstring wExt = fmt->extension.toStdWString();
+
+        // Remove only what registerFileAssociations() wrote, all under HKCU.
+        const std::wstring extKey = L"Software\\Classes\\" + wExt + L"\\OpenWithProgids";
+        HKEY hKeyExt = nullptr;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, extKey.c_str(), 0, KEY_SET_VALUE, &hKeyExt) == ERROR_SUCCESS) {
+            RegDeleteValueW(hKeyExt, wProgId.c_str());
+            RegCloseKey(hKeyExt);
+        }
+        RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\" + wProgId).c_str());
+    }
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    return true;
+#else
+    Q_UNUSED(extensions);
+    return false;
+#endif
+}
+
+void WindowsIntegration::setupMediaKeyCommands(const MediaKeyCallbacks& callbacks) {
+#ifdef _WIN32
+    using namespace winrt::Windows::Media;
+    if (!m_hwnd) return;
+    try {
+        auto interop = winrt::get_activation_factory<SystemMediaTransportControls,
+                                                     ISystemMediaTransportControlsInterop>();
+        SystemMediaTransportControls controls{nullptr};
+        winrt::check_hresult(interop->GetForWindow(static_cast<HWND>(m_hwnd),
+                                                   winrt::guid_of<SystemMediaTransportControls>(),
+                                                   winrt::put_abi(controls)));
+        m_smtc = std::make_unique<Smtc>();
+        m_smtc->controls = controls;
+        controls.IsPlayEnabled(true);
+        controls.IsPauseEnabled(true);
+        controls.IsNextEnabled(true);
+        controls.IsPreviousEnabled(true);
+        controls.IsEnabled(false); // until something is playing
+
+        // Raised on a background thread; the callbacks queue onto the GUI thread.
+        m_smtc->buttonToken = controls.ButtonPressed(
+            [callbacks](SystemMediaTransportControls const&,
+                        SystemMediaTransportControlsButtonPressedEventArgs const& args) {
+                switch (args.Button()) {
+                case SystemMediaTransportControlsButton::Play:
+                    if (callbacks.onPlay) callbacks.onPlay();
+                    break;
+                case SystemMediaTransportControlsButton::Pause:
+                    if (callbacks.onPause) callbacks.onPause();
+                    break;
+                case SystemMediaTransportControlsButton::Next:
+                    if (callbacks.onNextTrack) callbacks.onNextTrack();
+                    break;
+                case SystemMediaTransportControlsButton::Previous:
+                    if (callbacks.onPreviousTrack) callbacks.onPreviousTrack();
+                    break;
+                default:
+                    break;
+                }
+            });
+        m_smtc->seekToken = controls.PlaybackPositionChangeRequested(
+            [callbacks](SystemMediaTransportControls const&, PlaybackPositionChangeRequestedEventArgs const& args) {
+                if (callbacks.onSeek) {
+                    callbacks.onSeek(std::chrono::duration<double>(args.RequestedPlaybackPosition()).count());
+                }
+            });
+    } catch (...) {
+        m_smtc.reset(); // SMTC unavailable (e.g. Windows Server without media features)
+    }
+#else
+    Q_UNUSED(callbacks);
+#endif
+}
+
+void WindowsIntegration::setNowPlayingInfo(const NowPlayingInfo& info) {
+#ifdef _WIN32
+    using namespace winrt::Windows::Media;
+    using winrt::Windows::Foundation::TimeSpan;
+    if (!m_smtc || !m_smtc->controls) return;
+    try {
+        auto& controls = m_smtc->controls;
+        controls.IsEnabled(true);
+        controls.PlaybackStatus(info.playbackRate > 0.0 ? MediaPlaybackStatus::Playing
+                                                        : MediaPlaybackStatus::Paused);
+
+        auto updater = controls.DisplayUpdater();
+        updater.Type(MediaPlaybackType::Video);
+        updater.VideoProperties().Title(winrt::hstring(info.title.toStdWString()));
+        updater.Update();
+
+        const auto toSpan = [](double s) {
+            return std::chrono::duration_cast<TimeSpan>(std::chrono::duration<double>(std::max(0.0, s)));
+        };
+        SystemMediaTransportControlsTimelineProperties timeline;
+        timeline.StartTime(TimeSpan{0});
+        timeline.MinSeekTime(TimeSpan{0});
+        timeline.EndTime(toSpan(info.duration));
+        timeline.MaxSeekTime(toSpan(info.duration));
+        timeline.Position(toSpan(info.position));
+        controls.UpdateTimelineProperties(timeline);
+    } catch (...) {
+    }
+#else
+    Q_UNUSED(info);
+#endif
+}
+
+void WindowsIntegration::clearNowPlayingInfo() {
+#ifdef _WIN32
+    if (!m_smtc || !m_smtc->controls) return;
+    try {
+        m_smtc->controls.DisplayUpdater().ClearAll();
+        m_smtc->controls.IsEnabled(false);
+    } catch (...) {
+    }
 #endif
 }
 

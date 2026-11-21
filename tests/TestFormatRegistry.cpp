@@ -1,6 +1,7 @@
 #include "TestCheck.h"
 #include <iostream>
 #include "formats/FormatRegistry.h"
+#include "formats/AssociationChanges.h"
 
 int main() {
     using namespace kvikplay;
@@ -47,5 +48,14 @@ int main() {
     CHECK(filter.contains("*.mp3"));
 
     std::cout << "[TestFormatRegistry] All tests passed!" << std::endl;
+    // Item 24: unticking a format in the dialog must unregister it.
+    {
+        const kvikplay::AssociationChanges ch = kvikplay::diffAssociations(
+            QStringList{".mp4", ".mkv", ".avi"},   // registered before
+            QStringList{".mkv", ".webm"});         // ticked now
+        CHECK(ch.toRegister == (QStringList{".mkv", ".webm"}));  // re-register all ticked (idempotent)
+        CHECK(ch.toUnregister == (QStringList{".avi", ".mp4"})); // sorted, unticked ones only
+    }
+
     return 0;
 }

@@ -1,0 +1,13 @@
+# gitleaks config (SEC-CI-1): the default rules, plus the same exception the global pre-commit hook
+# honours: a line marked "secret-scan:allow" holds a deliberately fake value. Copied by claude-new to
+# .gitleaks.toml (gitleaks reads it from the repo root). A reviewed finding without the marker goes
+# in .gitleaksignore (its fingerprint, as gitleaks prints it).
+title = "gitleaks config (tools/standards/templates/gitleaks.toml)"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberately fake values, marked like the pre-commit hook's exception"
+regexTarget = "line"
+regexes = ['''secret-scan:allow''']

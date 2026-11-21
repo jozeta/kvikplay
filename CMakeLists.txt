@@ -20,6 +20,11 @@ endif()
 
 set(CMAKE_AUTORCC ON)
 
+if(WIN32)
+    # Windows 10+ APIs (GetDpiForWindow, System Media Transport Controls)
+    add_compile_definitions(WINVER=0x0A00 _WIN32_WINNT=0x0A00 NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 # Homebrew paths for macOS discovery
 if(APPLE)
     list(APPEND CMAKE_PREFIX_PATH 
@@ -117,6 +122,8 @@ qt_add_executable(kvikplay
 # One version number: project(VERSION) above -> version.h, Info.plist, app.rc
 configure_file(src/app/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h" @ONLY)
 target_include_directories(kvikplay PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
+# A GUI app on Windows: no console window behind the player.
+set_target_properties(kvikplay PROPERTIES WIN32_EXECUTABLE TRUE)
 
 target_link_libraries(kvikplay PRIVATE
     Qt6::Core
@@ -163,6 +170,7 @@ elseif(WIN32)
     target_link_libraries(kvikplay PRIVATE
         dwmapi
         shell32
+        windowsapp   # C++/WinRT: System Media Transport Controls
     )
 endif()
 

@@ -1,5 +1,6 @@
 #include "FileAssociationDialog.h"
 #include "config/SettingsManager.h"
+#include "formats/AssociationChanges.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGridLayout>
@@ -99,12 +100,18 @@ void FileAssociationDialog::setupUi() {
 
     // Platform informational note
 #ifdef _WIN32
-    auto* noteLabel = new QLabel(
-        QStringLiteral("Note: Windows 10/11 requires confirming default apps in Windows Settings."), this);
+    const QString note = QStringLiteral(
+        "Windows asks you to confirm the default app: after saving, choose Kvikplay in "
+        "Settings \u2192 Apps \u2192 Default apps.");
+#else
+    const QString note = QStringLiteral(
+        "To stop opening a format with Kvikplay, select a file of that type in Finder, choose "
+        "File \u2192 Get Info, pick another app under \u201cOpen with\u201d and click Change All.");
+#endif
+    auto* noteLabel = new QLabel(note, this);
     noteLabel->setStyleSheet(QStringLiteral("color: #8f96a3; font-size: 11px;"));
     noteLabel->setWordWrap(true);
     mainLayout->addWidget(noteLabel);
-#endif
 
     // Button bar
     auto* bottomLayout = new QHBoxLayout();
@@ -166,10 +173,13 @@ QWidget* FileAssociationDialog::createCategoryGroup(FormatCategory category, con
     for (const auto& fmt : formats) {
         auto* cb = new QCheckBox(fmt.extension, gridWidget);
 
-        // Check if currently associated or saved
-        bool isDefault = m_platform ? m_platform->isDefaultPlayerForExtension(fmt.extension) : false;
-        bool isSaved = savedExts.contains(fmt.extension);
-        cb->setChecked(isDefault || isSaved);
+        // Ticked when Kvikplay really is the default app. On Windows a registered
+        // format also counts (the user confirms the default in Settings); macOS has
+        // no way to un-register, so a saved choice alone must not show as ticked.
+        const bool isDefault = m_platform ? m_platform->isDefaultPlayerForExtension(fmt.extension) : false;
+        const bool isRegistered = savedExts.contains(fmt.extension) && m_platform &&
+                                  m_platform->canUnregisterFileAssociations();
+        cb->setChecked(isDefault || isRegistered);
 
         grid->addWidget(cb, row, col);
         m_checkboxes.push_back(cb);
@@ -212,11 +222,16 @@ void FileAssociationDialog::save() {
         }
     }
 
+    const AssociationChanges changes =
+        diffAssociations(SettingsManager::instance().associatedExtensions(), selected);
     SettingsManager::instance().setAssociatedExtensions(selected);
     SettingsManager::instance().save();
 
     if (m_platform) {
-        m_platform->registerFileAssociations(selected);
+        if (!changes.toUnregister.isEmpty() && m_platform->canUnregisterFileAssociations()) {
+            m_platform->unregisterFileAssociations(changes.toUnregister);
+        }
+        m_platform->registerFileAssociations(changes.toRegister);
     }
 
     accept();
