@@ -56,7 +56,11 @@ jobs:
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-cppwinrt
       - name: Configure
-        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKVIKPLAY_STANDALONE=OFF
+        # The native (relocating) pkgconf: MSYS's own pkg-config returns /ucrt64/... paths
+        # that a native CMake can't resolve.
+        run: >-
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKVIKPLAY_STANDALONE=OFF
+          -DPKG_CONFIG_EXECUTABLE="$(cygpath -m /ucrt64/bin/pkgconf.exe)"
       - name: Build
         run: cmake --build build
       - name: Test

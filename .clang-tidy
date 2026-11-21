@@ -1,10 +1,13 @@
 # QA-LINT-1: C++ linter, run in CI (.github/workflows/ci.yml) against compile_commands.json.
+# NewDeleteLeaks is off: it reports every Qt object created with a parent (new QActionGroup(menu))
+# as a leak, although the parent owns and deletes it.
 Checks: >
   -*,
   bugprone-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-narrowing-conversions,
   clang-analyzer-*,
+  -clang-analyzer-cplusplus.NewDeleteLeaks,
   performance-*,
   -performance-enum-size,
   portability-*,
