@@ -356,6 +356,11 @@ target_include_directories(test_overlay_render PRIVATE src)
 target_link_libraries(test_overlay_render PRIVATE Qt6::Widgets Qt6::Svg)
 add_test(NAME test_overlay_render COMMAND test_overlay_render)
 
+add_executable(test_render_api tests/TestRenderApi.cpp)
+target_include_directories(test_render_api PRIVATE src)
+target_link_libraries(test_render_api PRIVATE PkgConfig::MPV)
+add_test(NAME test_render_api COMMAND test_render_api)
+
 add_executable(test_platform
     tests/TestPlatform.cpp
     src/platform/PlatformIntegration.h
@@ -400,7 +405,7 @@ add_test(NAME test_version_consistency
 
 # Run every test from the source tree (so test_media/ is found from any build
 # folder) and point the settings at a throwaway folder instead of the user's.
-set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_thumbnails test_folder_index test_context_menu test_update test_time_format test_overlay_render test_platform)
+set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_thumbnails test_folder_index test_context_menu test_update test_time_format test_overlay_render test_render_api test_platform)
 set_tests_properties(${KVIKPLAY_TESTS} PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "KVIKPLAY_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-config"
