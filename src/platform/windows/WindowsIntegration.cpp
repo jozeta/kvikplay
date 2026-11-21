@@ -10,6 +10,7 @@
 #include <windows.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <shlobj.h> // SHChangeNotify (left out by WIN32_LEAN_AND_MEAN)
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "shell32.lib")
 
@@ -18,16 +19,8 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Media.h>
 
-#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
-#define DWMWA_WINDOW_CORNER_PREFERENCE 33
-#endif
-
-enum DWM_WINDOW_CORNER_PREFERENCE {
-    DWMWCP_DEFAULT = 0,
-    DWMWCP_DONOTROUND = 1,
-    DWMWCP_ROUND = 2,
-    DWMWCP_ROUNDSMALL = 3
-};
+// DWMWA_WINDOW_CORNER_PREFERENCE / DWM_WINDOW_CORNER_PREFERENCE come from dwmapi.h
+// (Windows SDK 10.0.22000 and later, and MinGW-w64).
 #endif
 
 namespace kvikplay {
