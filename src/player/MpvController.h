@@ -4,6 +4,8 @@
 #include <QString>
 #include <vector>
 #include <atomic>
+#include <cstdint>
+#include <unordered_map>
 #include <mpv/client.h>
 #include "PlaybackState.h"
 #include "MediaInfo.h"
@@ -63,6 +65,8 @@ public:
 
     // Screenshot and Audio enhancement
     void takeScreenshot(bool includeSubtitles = false);
+    // Folder for screenshots; empty = the Desktop (or home if there is none).
+    void setScreenshotDirectory(const QString& dir) { m_screenshotDir = dir; }
     void setDialogueBoost(bool enabled);
 
     const std::vector<TrackInfo>& audioTracks() const { return m_mediaInfo.audioTracks; }
@@ -101,7 +105,13 @@ private slots:
 private:
     static void onMpvWakeup(void* ctx);
     void handleMpvEvent(mpv_event* event);
-    void handlePropertyChange(mpv_event_property* prop);
+    void handlePropertyChange(uint64_t id, mpv_event_property* prop);
+    void handleCommandReply(uint64_t id, int error);
+
+    // Async commands whose completion we report (screenshot saved, subtitle loaded).
+    enum class PendingKind { Screenshot, SubtitleAdd };
+    struct PendingCommand { PendingKind kind; QString path; };
+    uint64_t registerPending(PendingKind kind, const QString& path);
     void updateVideoParams();
     void updateTracks();
     void updateChapters();
@@ -117,6 +127,9 @@ private:
     bool m_isPaused{false};
     double m_subtitleDelay{0.0};
     int m_currentChapter{0};
+    QString m_screenshotDir;
+    std::unordered_map<uint64_t, PendingCommand> m_pending;
+    uint64_t m_nextReplyId{1000};
     std::atomic<bool> m_wakeupPending{false};
     mutable StreamStats m_cachedStats;
     mutable bool m_staticStatsCached{false};

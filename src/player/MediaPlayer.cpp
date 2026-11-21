@@ -53,7 +53,13 @@ void MediaPlayer::openMedia(const QString& filePath) {
 
     QFileInfo fi(filePath);
     if (!fi.exists() || !fi.isFile()) {
-        emit errorOccurred(QStringLiteral("File does not exist: %1").arg(filePath));
+        emit errorOccurred(QStringLiteral("File not found: %1").arg(fi.fileName()));
+        return;
+    }
+    // Only open formats Kvikplay lists. Playlists, EDL and other container-of-
+    // references formats could make libmpv read other files or reach the network.
+    if (!FormatRegistry::instance().isSupported(filePath)) {
+        emit errorOccurred(QStringLiteral("%1 is not a supported media file").arg(fi.fileName()));
         return;
     }
 

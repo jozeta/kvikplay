@@ -7,9 +7,29 @@
 #include <QThread>
 #include <QFileInfo>
 #include <QDir>
+#include <QTemporaryDir>
+#include <QFile>
+#include <functional>
 #include "player/MediaPlayer.h"
 #include "player/PlaybackState.h"
 #include "formats/FormatRegistry.h"
+
+static bool waitFor(QCoreApplication& app, const std::function<bool()>& cond, int ms = 5000) {
+    for (int waited = 0; waited < ms; waited += 20) {
+        app.processEvents();
+        if (cond()) return true;
+        QThread::msleep(20);
+    }
+    app.processEvents();
+    return cond();
+}
+
+static QString mpvOption(kvikplay::MediaPlayer& p, const char* name) {
+    char* v = mpv_get_property_string(p.controller()->handle(), (QByteArray("options/") + name).constData());
+    QString out = v ? QString::fromUtf8(v) : QString();
+    if (v) mpv_free(v);
+    return out;
+}
 
 static QString findTestMedia(const QString& relPath) {
     if (QFileInfo::exists(relPath)) return relPath;
@@ -167,6 +187,66 @@ int main(int argc, char* argv[]) {
         app.processEvents();
     }
     CHECK(errorOccurred);
+
+    // Item 13 + 16: libmpv is hardened and starts without its built-in Lua scripts.
+    std::cout << "[TestPlayback] Testing hardened mpv options..." << std::endl;
+    for (const char* opt : {"config", "load-scripts", "ytdl", "access-references", "osc",
+                            "load-stats-overlay", "load-console", "load-select", "load-commands",
+                            "load-context-menu", "load-positioning", "load-auto-profiles"}) {
+        const QString v = mpvOption(player, opt);
+        if (v != QStringLiteral("no")) std::cerr << "  option " << opt << " = " << v.toStdString() << std::endl;
+        CHECK(v == QStringLiteral("no"));
+    }
+
+    // Item 13: only formats from FormatRegistry are opened (no playlists, EDL, ...).
+    std::cout << "[TestPlayback] Testing unsupported file rejection..." << std::endl;
+    {
+        QTemporaryDir tmp;
+        const QString playlist = tmp.path() + QStringLiteral("/list.m3u");
+        QFile f(playlist);
+        CHECK(f.open(QIODevice::WriteOnly));
+        f.write("http://example.invalid/stream.mp4\n");
+        f.close();
+        QString lastError;
+        auto c = QObject::connect(&player, &MediaPlayer::errorOccurred, [&](const QString& e) { lastError = e; });
+        player.openMedia(playlist);
+        app.processEvents();
+        QObject::disconnect(c);
+        CHECK(lastError.contains(QStringLiteral("not a supported")));
+        CHECK(player.mediaInfo().filePath != playlist);
+    }
+
+    // Item 3: replay after the end, then pause, must not be stuck in Ended.
+    std::cout << "[TestPlayback] Testing replay after end..." << std::endl;
+    player.openMedia(findTestMedia(QStringLiteral("test_media/test_16_9.mp4")));
+    CHECK(waitFor(app, [&] { return player.state() == PlaybackState::Playing && player.duration() > 1.0; }));
+    player.seekAbsolute(player.duration() - 0.3, true);
+    CHECK(waitFor(app, [&] { return player.state() == PlaybackState::Ended; }));
+    player.togglePlayPause();   // replay from the start
+    CHECK(waitFor(app, [&] { return player.state() == PlaybackState::Playing && player.position() < 1.0; }));
+    player.togglePlayPause();   // must pause, not restart
+    CHECK(waitFor(app, [&] { return player.state() == PlaybackState::Paused; }));
+
+    // Item 5: a screenshot is reported only once the file exists; failures are reported.
+    std::cout << "[TestPlayback] Testing screenshot completion..." << std::endl;
+    {
+        QTemporaryDir shotDir;
+        player.controller()->setScreenshotDirectory(shotDir.path());
+        QString saved;
+        auto c = QObject::connect(&player, &MediaPlayer::screenshotTaken, [&](const QString& p) { saved = p; });
+        player.takeScreenshot(false);
+        CHECK(waitFor(app, [&] { return !saved.isEmpty(); }));
+        CHECK(QFileInfo::exists(saved));
+        QObject::disconnect(c);
+
+        player.controller()->setScreenshotDirectory(shotDir.path() + QStringLiteral("/missing/dir"));
+        QString err;
+        auto c2 = QObject::connect(&player, &MediaPlayer::errorOccurred, [&](const QString& e) { err = e; });
+        player.takeScreenshot(false);
+        CHECK(waitFor(app, [&] { return !err.isEmpty(); }));
+        CHECK(err.contains(QStringLiteral("Screenshot")));
+        QObject::disconnect(c2);
+    }
 
     std::cout << "[TestPlayback] All playback tests passed successfully!" << std::endl;
     return 0;

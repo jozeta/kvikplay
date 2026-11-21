@@ -1,4 +1,5 @@
 #include "MpvController.h"
+#include "MpvOptions.h"
 #include <QDebug>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -10,6 +11,15 @@
 #include <cstring>
 
 namespace kvikplay {
+
+namespace {
+// reply_userdata ids for observed properties; dispatched with a switch instead of
+// string compares (time-pos arrives once per video frame).
+enum PropId : uint64_t {
+    PropTimePos = 1, PropDuration, PropPause, PropVolume, PropMute, PropSpeed,
+    PropVideoParams, PropEofReached, PropTrackList, PropSubDelay, PropChapter, PropChapterList
+};
+} // namespace
 
 MpvController::MpvController(QObject* parent)
     : QObject(parent) {
@@ -38,15 +48,12 @@ bool MpvController::initialize() {
     }
 
     // Configure options before mpv_initialize
+    applyBaseMpvOptions(m_mpv);
     mpv_set_option_string(m_mpv, "vo", "libmpv,null");
     mpv_set_option_string(m_mpv, "keep-open", "yes");
     mpv_set_option_string(m_mpv, "idle", "yes");
-    mpv_set_option_string(m_mpv, "terminal", "no");
     mpv_set_option_string(m_mpv, "msg-level", "all=warn");
     mpv_set_option_string(m_mpv, "audio-client-name", "Kvikplay");
-    mpv_set_option_string(m_mpv, "ytdl", "no");
-    mpv_set_option_string(m_mpv, "input-default-bindings", "no");
-    mpv_set_option_string(m_mpv, "input-vo-keyboard", "no");
 
     // Super fast seeking & low latency
     mpv_set_option_string(m_mpv, "hr-seek", "default");
@@ -62,14 +69,15 @@ bool MpvController::initialize() {
     mpv_set_option_string(m_mpv, "audio-pitch-correction", "yes");
 
     // Hardware decoding & rendering optimization:
-    // VideoToolbox on macOS (native Apple Silicon / Intel decoders), D3D11VA on Windows
+    // VideoToolbox on macOS (zero-copy into OpenGL). On Windows the renderer is
+    // OpenGL, where plain d3d11va has no zero-copy interop and silently falls back
+    // to software decoding; auto-safe picks a working method (interop or -copy).
 #if defined(Q_OS_MACOS)
     mpv_set_option_string(m_mpv, "hwdec", "videotoolbox");
     mpv_set_option_string(m_mpv, "videotoolbox-format", "auto");
     mpv_set_option_string(m_mpv, "opengl-pbo", "yes");
 #elif defined(Q_OS_WIN)
-    mpv_set_option_string(m_mpv, "hwdec", "d3d11va");
-    mpv_set_option_string(m_mpv, "gpu-api", "d3d11");
+    mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
 #else
     mpv_set_option_string(m_mpv, "hwdec", "auto-safe");
 #endif
@@ -97,18 +105,18 @@ bool MpvController::initialize() {
     }
 
     // Property observation
-    mpv_observe_property(m_mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 2, "duration", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 3, "pause", MPV_FORMAT_FLAG);
-    mpv_observe_property(m_mpv, 4, "volume", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 5, "mute", MPV_FORMAT_FLAG);
-    mpv_observe_property(m_mpv, 6, "speed", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 7, "video-params", MPV_FORMAT_NODE);
-    mpv_observe_property(m_mpv, 8, "eof-reached", MPV_FORMAT_FLAG);
-    mpv_observe_property(m_mpv, 9, "track-list", MPV_FORMAT_NODE);
-    mpv_observe_property(m_mpv, 10, "sub-delay", MPV_FORMAT_DOUBLE);
-    mpv_observe_property(m_mpv, 11, "chapter", MPV_FORMAT_INT64);
-    mpv_observe_property(m_mpv, 12, "chapter-list", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, PropTimePos, "time-pos", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, PropDuration, "duration", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, PropPause, "pause", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, PropVolume, "volume", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, PropMute, "mute", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, PropSpeed, "speed", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, PropVideoParams, "video-params", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, PropEofReached, "eof-reached", MPV_FORMAT_FLAG);
+    mpv_observe_property(m_mpv, PropTrackList, "track-list", MPV_FORMAT_NODE);
+    mpv_observe_property(m_mpv, PropSubDelay, "sub-delay", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(m_mpv, PropChapter, "chapter", MPV_FORMAT_INT64);
+    mpv_observe_property(m_mpv, PropChapterList, "chapter-list", MPV_FORMAT_NODE);
 
     mpv_set_wakeup_callback(m_mpv, onMpvWakeup, this);
     return true;
@@ -173,62 +181,135 @@ void MpvController::handleMpvEvent(mpv_event* event) {
     case MPV_EVENT_PROPERTY_CHANGE: {
         auto* prop = static_cast<mpv_event_property*>(event->data);
         if (prop) {
-            handlePropertyChange(prop);
+            handlePropertyChange(event->reply_userdata, prop);
         }
         break;
     }
+
+    case MPV_EVENT_COMMAND_REPLY:
+        handleCommandReply(event->reply_userdata, event->error);
+        break;
 
     default:
         break;
     }
 }
 
-void MpvController::handlePropertyChange(mpv_event_property* prop) {
-    if (!prop->name) return;
-    std::string name(prop->name);
+void MpvController::handlePropertyChange(uint64_t id, mpv_event_property* prop) {
+    const bool isDouble = prop->format == MPV_FORMAT_DOUBLE;
+    const bool isFlag = prop->format == MPV_FORMAT_FLAG;
 
-    if (name == "time-pos" && prop->format == MPV_FORMAT_DOUBLE) {
-        m_position = *static_cast<double*>(prop->data);
-        emit positionChanged(m_position);
-    } else if (name == "duration" && prop->format == MPV_FORMAT_DOUBLE) {
-        m_duration = *static_cast<double*>(prop->data);
-        m_mediaInfo.duration = m_duration;
-        emit durationChanged(m_duration);
-    } else if (name == "pause" && prop->format == MPV_FORMAT_FLAG) {
-        int paused = *static_cast<int*>(prop->data);
-        m_isPaused = (paused != 0);
-        if (m_state == PlaybackState::Playing || m_state == PlaybackState::Paused) {
-            m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
-            emit playbackStateChanged(m_state);
+    switch (id) {
+    case PropTimePos:
+        if (isDouble) {
+            m_position = *static_cast<double*>(prop->data);
+            emit positionChanged(m_position);
         }
-    } else if (name == "volume" && prop->format == MPV_FORMAT_DOUBLE) {
-        m_volume = static_cast<int>(std::round(*static_cast<double*>(prop->data)));
-        emit volumeChanged(m_volume);
-    } else if (name == "mute" && prop->format == MPV_FORMAT_FLAG) {
-        m_isMuted = (*static_cast<int*>(prop->data) != 0);
-        emit muteChanged(m_isMuted);
-    } else if (name == "speed" && prop->format == MPV_FORMAT_DOUBLE) {
-        m_speed = *static_cast<double*>(prop->data);
-        emit speedChanged(m_speed);
-    } else if (name == "video-params") {
+        break;
+    case PropDuration:
+        if (isDouble) {
+            m_duration = *static_cast<double*>(prop->data);
+            m_mediaInfo.duration = m_duration;
+            emit durationChanged(m_duration);
+        }
+        break;
+    case PropPause:
+        if (isFlag) {
+            m_isPaused = (*static_cast<int*>(prop->data) != 0);
+            if (m_state == PlaybackState::Playing || m_state == PlaybackState::Paused) {
+                m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
+                emit playbackStateChanged(m_state);
+            }
+        }
+        break;
+    case PropVolume:
+        if (isDouble) {
+            m_volume = static_cast<int>(std::round(*static_cast<double*>(prop->data)));
+            emit volumeChanged(m_volume);
+        }
+        break;
+    case PropMute:
+        if (isFlag) {
+            m_isMuted = (*static_cast<int*>(prop->data) != 0);
+            emit muteChanged(m_isMuted);
+        }
+        break;
+    case PropSpeed:
+        if (isDouble) {
+            const double speed = *static_cast<double*>(prop->data);
+            if (speed != m_speed) {
+                m_speed = speed;
+                emit speedChanged(m_speed);
+            }
+        }
+        break;
+    case PropVideoParams:
         updateVideoParams();
-    } else if (name == "track-list") {
+        break;
+    case PropTrackList:
         updateTracks();
-    } else if (name == "sub-delay" && prop->format == MPV_FORMAT_DOUBLE) {
-        m_subtitleDelay = *static_cast<double*>(prop->data);
-        emit subtitleDelayChanged(m_subtitleDelay);
-    } else if (name == "chapter" && prop->format == MPV_FORMAT_INT64) {
-        m_currentChapter = static_cast<int>(*static_cast<int64_t*>(prop->data));
-        emit chapterChanged(m_currentChapter, currentChapterTitle());
-    } else if (name == "chapter-list") {
-        updateChapters();
-    } else if (name == "eof-reached" && prop->format == MPV_FORMAT_FLAG) {
-        int eof = *static_cast<int*>(prop->data);
-        if (eof) {
-            m_state = PlaybackState::Ended;
-            emit playbackStateChanged(m_state);
-            emit playbackEnded();
+        break;
+    case PropSubDelay:
+        if (isDouble) {
+            m_subtitleDelay = *static_cast<double*>(prop->data);
+            emit subtitleDelayChanged(m_subtitleDelay);
         }
+        break;
+    case PropChapter:
+        if (prop->format == MPV_FORMAT_INT64) {
+            m_currentChapter = static_cast<int>(*static_cast<int64_t*>(prop->data));
+            emit chapterChanged(m_currentChapter, currentChapterTitle());
+        }
+        break;
+    case PropChapterList:
+        updateChapters();
+        break;
+    case PropEofReached:
+        if (isFlag) {
+            if (*static_cast<int*>(prop->data) != 0) {
+                m_state = PlaybackState::Ended;
+                emit playbackStateChanged(m_state);
+                emit playbackEnded();
+            } else if (m_state == PlaybackState::Ended) {
+                // Left the end (replay or seek back): playing or paused again.
+                m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
+                emit playbackStateChanged(m_state);
+            }
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+uint64_t MpvController::registerPending(PendingKind kind, const QString& path) {
+    const uint64_t id = m_nextReplyId++;
+    m_pending.emplace(id, PendingCommand{kind, path});
+    return id;
+}
+
+void MpvController::handleCommandReply(uint64_t id, int error) {
+    auto it = m_pending.find(id);
+    if (it == m_pending.end()) return;
+    const PendingCommand cmd = it->second;
+    m_pending.erase(it);
+
+    const QString fileName = QFileInfo(cmd.path).fileName();
+    switch (cmd.kind) {
+    case PendingKind::Screenshot:
+        if (error < 0) {
+            emit errorOccurred(QStringLiteral("Screenshot failed: %1").arg(QString::fromUtf8(mpv_error_string(error))));
+        } else {
+            emit screenshotTaken(cmd.path);
+        }
+        break;
+    case PendingKind::SubtitleAdd:
+        if (error < 0) {
+            emit errorOccurred(QStringLiteral("Could not load subtitles: %1").arg(fileName));
+        } else {
+            emit subtitleAdded(fileName);
+        }
+        break;
     }
 }
 
@@ -476,17 +557,21 @@ void MpvController::setSpeed(double speed) {
 
 void MpvController::takeScreenshot(bool includeSubtitles) {
     if (!m_mpv) return;
-    QString desktopDir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
-    if (desktopDir.isEmpty()) {
-        desktopDir = QDir::homePath();
+    QString dir = m_screenshotDir;
+    if (dir.isEmpty()) {
+        dir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
     }
-    QString timeStr = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss"));
-    QString filePath = QStringLiteral("%1/Kvikplay_%2.png").arg(desktopDir, timeStr);
+    if (dir.isEmpty()) {
+        dir = QDir::homePath();
+    }
+    // Milliseconds in the name: two screenshots in the same second must not overwrite.
+    QString timeStr = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_hhmmss_zzz"));
+    QString filePath = QStringLiteral("%1/Kvikplay_%2.png").arg(dir, timeStr);
     QByteArray filePathUtf8 = filePath.toUtf8();
     const char* mode = includeSubtitles ? "subtitles" : "video";
     const char* cmd[] = {"screenshot-to-file", filePathUtf8.constData(), mode, nullptr};
-    mpv_command_async(m_mpv, 0, cmd);
-    emit screenshotTaken(filePath);
+    // Reported from handleCommandReply() once mpv has actually written the file.
+    mpv_command_async(m_mpv, registerPending(PendingKind::Screenshot, filePath), cmd);
 }
 
 void MpvController::setDialogueBoost(bool enabled) {
@@ -502,9 +587,7 @@ void MpvController::addSubtitleTrack(const QString& filePath) {
     if (!m_mpv || filePath.isEmpty()) return;
     QByteArray pathUtf8 = filePath.toUtf8();
     const char* cmd[] = {"sub-add", pathUtf8.constData(), "select", nullptr};
-    mpv_command_async(m_mpv, 0, cmd);
-    QFileInfo fi(filePath);
-    emit subtitleAdded(fi.fileName());
+    mpv_command_async(m_mpv, registerPending(PendingKind::SubtitleAdd, filePath), cmd);
 }
 
 void MpvController::setSubtitleDelay(double seconds) {
