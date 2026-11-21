@@ -1,5 +1,6 @@
 #pragma once
 
+#include <initializer_list>
 #include <mpv/client.h>
 
 namespace kvikplay {
