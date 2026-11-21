@@ -9,21 +9,25 @@ AspectRatioManager::AspectRatioManager() = default;
 void AspectRatioManager::setAspectRatio(double ratio) {
     if (ratio > 0.05 && ratio < 20.0) {
         m_aspectRatio = ratio;
-        // Keep minimum dimensions aligned with ratio
-        int minH = static_cast<int>(std::round(m_minSize.width() / m_aspectRatio));
-        if (minH < 180) {
-            minH = 180;
-            m_minSize.setWidth(static_cast<int>(std::round(minH * m_aspectRatio)));
-            m_minSize.setHeight(minH);
-        } else {
-            m_minSize.setHeight(minH);
-        }
+        updateMinimumSize();
+    }
+}
+
+void AspectRatioManager::updateMinimumSize() {
+    // Computed from scratch every time: the short side is m_minShortSide and the
+    // long side follows the ratio, so earlier videos never affect the minimum.
+    const int s = m_minShortSide;
+    if (m_aspectRatio >= 1.0) {
+        m_minSize = QSize(static_cast<int>(std::round(s * m_aspectRatio)), s);
+    } else {
+        m_minSize = QSize(s, static_cast<int>(std::round(s / m_aspectRatio)));
     }
 }
 
 void AspectRatioManager::setMinimumSize(const QSize& minSize) {
     if (minSize.width() > 100 && minSize.height() > 100) {
-        m_minSize = minSize;
+        m_minShortSide = std::min(minSize.width(), minSize.height());
+        updateMinimumSize();
     }
 }
 

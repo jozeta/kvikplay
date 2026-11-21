@@ -27,7 +27,10 @@ public:
     QSize calculateInitialWindowSize(int mediaWidth, int mediaHeight, const QSize& maxScreenBounds) const;
 
 private:
+    void updateMinimumSize();
+
     double m_aspectRatio{16.0 / 9.0};
+    int m_minShortSide{180};
     QSize m_minSize{320, 180};
 };
 

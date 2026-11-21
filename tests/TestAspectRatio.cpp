@@ -50,6 +50,22 @@ int main() {
     double ratio = static_cast<double>(constrained.width()) / constrained.height();
     CHECK(std::abs(ratio - (16.0 / 9.0)) < 0.05);
 
+    // Item 8: the minimum size depends only on the current ratio (short side 180),
+    // never on the videos played before.
+    std::cout << "[TestAspectRatio] Checking minimum size has no history..." << std::endl;
+    AspectRatioManager fresh;
+    fresh.setAspectRatio(9.0 / 16.0);
+    const QSize freshVertical = fresh.minimumSize();
+    CHECK(freshVertical == QSize(180, 320));
+
+    AspectRatioManager used;
+    used.setAspectRatio(21.0 / 9.0);
+    CHECK(used.minimumSize() == QSize(420, 180));
+    used.setAspectRatio(9.0 / 16.0);
+    CHECK(used.minimumSize() == freshVertical);   // was 420 x 747 before the fix
+    used.setAspectRatio(16.0 / 9.0);
+    CHECK(used.minimumSize() == QSize(320, 180));
+
     std::cout << "[TestAspectRatio] All tests passed!" << std::endl;
     return 0;
 }
