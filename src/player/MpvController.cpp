@@ -1,5 +1,6 @@
 #include "MpvController.h"
 #include "MpvOptions.h"
+#include "app/DiagnosticsLog.h"
 #include <QDebug>
 #include <QFileInfo>
 #include <QStandardPaths>
@@ -9,6 +10,7 @@
 #include <cmath>
 #include <clocale>
 #include <cstring>
+#include <string_view>
 
 namespace kvikplay {
 
@@ -118,6 +120,10 @@ bool MpvController::initialize() {
     mpv_observe_property(m_mpv, PropChapter, "chapter", MPV_FORMAT_INT64);
     mpv_observe_property(m_mpv, PropChapterList, "chapter-list", MPV_FORMAT_NODE);
 
+    // Verbose, so the diagnostics log can show why a video output was skipped while
+    // mpv probes them (that reason is only printed at verbose level). Filtered below.
+    mpv_request_log_messages(m_mpv, "v");
+
     mpv_set_wakeup_callback(m_mpv, onMpvWakeup, this);
     return true;
 }
@@ -158,6 +164,10 @@ void MpvController::handleMpvEvent(mpv_event* event) {
             mpv_free(title);
         }
         m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
+        if (char* vo = mpv_get_property_string(m_mpv, "current-vo")) {
+            DiagnosticsLog::write("app", QStringLiteral("file loaded; video output: %1").arg(QString::fromUtf8(vo)));
+            mpv_free(vo);
+        }
         updateVideoParams();
         updateTracks();
         updateChapters();
@@ -190,6 +200,20 @@ void MpvController::handleMpvEvent(mpv_event* event) {
         auto* prop = static_cast<mpv_event_property*>(event->data);
         if (prop) {
             handlePropertyChange(event->reply_userdata, prop);
+        }
+        break;
+    }
+
+    case MPV_EVENT_LOG_MESSAGE: {
+        auto* msg = static_cast<mpv_event_log_message*>(event->data);
+        if (!msg) break;
+        const std::string_view prefix(msg->prefix ? msg->prefix : "");
+        const bool important = msg->log_level <= MPV_LOG_LEVEL_WARN;
+        const bool videoPath = prefix == "vo" || prefix.starts_with("vo/") || prefix == "libmpv_render" ||
+                               prefix == "vd" || prefix.starts_with("hwdec") || prefix == "cplayer";
+        if (important || (msg->log_level <= MPV_LOG_LEVEL_V && videoPath)) {
+            DiagnosticsLog::write("mpv", QStringLiteral("%1 %2: %3").arg(
+                QString::fromUtf8(msg->level), QString::fromUtf8(msg->prefix), QString::fromUtf8(msg->text)));
         }
         break;
     }

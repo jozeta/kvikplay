@@ -1,5 +1,7 @@
 #include "app/Application.h"
 #include "config/SettingsManager.h"
+#include "app/DiagnosticsLog.h"
+#include <QSysInfo>
 #include "platform/SingleInstance.h"
 #include "window/MainWindow.h"
 #include "version.h"
@@ -27,6 +29,11 @@ int main(int argc, char* argv[]) {
     QSurfaceFormat::setDefaultFormat(format);
 
     kvikplay::Application app(argc, argv);
+
+    kvikplay::DiagnosticsLog::open(kvikplay::SettingsManager::instance().logFilePath());
+    kvikplay::DiagnosticsLog::write("app", QStringLiteral("Kvikplay %1 on %2 (%3), Qt %4")
+        .arg(QStringLiteral(KVIKPLAY_VERSION), QSysInfo::prettyProductName(),
+             QSysInfo::currentCpuArchitecture(), QString::fromLatin1(qVersion())));
 
     if (app.versionRequested()) {
 #ifdef _WIN32

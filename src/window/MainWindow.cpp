@@ -30,6 +30,7 @@
 #include <utility>
 #include <cmath>
 #include "version.h"
+#include "app/DiagnosticsLog.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -363,6 +364,7 @@ void MainWindow::openFile(const QString& filePath) {
         // Loading now would race the OpenGL setup and mpv would pick its "null"
         // video output (black window). Open it as soon as the surface is ready.
         m_pendingOpen = fi.absoluteFilePath();
+        DiagnosticsLog::write("app", QStringLiteral("open %1: waiting for the video surface").arg(fi.fileName()));
         return;
     }
 
@@ -382,6 +384,7 @@ void MainWindow::openFile(const QString& filePath) {
         m_thumbnailWorker->openFile(m_currentFilePath);
     }
 
+    DiagnosticsLog::write("app", QStringLiteral("open %1").arg(fi.fileName()));
     m_player->openMedia(m_currentFilePath); // starts playing as soon as it loads
     m_folderIndex.prefetch(fi.absolutePath()); // next/previous without blocking later
 }
@@ -787,6 +790,7 @@ void MainWindow::fitAndPositionWindow(const QSize& targetSize, const QPoint& pre
 StreamStats MainWindow::inspectorStats() const {
     StreamStats stats = m_player->streamStats();
     stats.renderer = m_renderer ? m_renderer->diagnostics() : QStringLiteral("-");
+    stats.logFile = DiagnosticsLog::path();
     return stats;
 }
 

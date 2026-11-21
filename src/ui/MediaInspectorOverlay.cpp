@@ -60,6 +60,7 @@ void MediaInspectorOverlay::updateStats(const StreamStats& stats) {
     addRow(QStringLiteral("Dropped Frames"), QString::number(stats.dropCount));
     addRow(QStringLiteral("Video Output"), stats.videoOutput.isEmpty() ? QStringLiteral("-") : stats.videoOutput);
     addRow(QStringLiteral("Renderer"), stats.renderer.isEmpty() ? QStringLiteral("-") : stats.renderer);
+    if (!stats.logFile.isEmpty()) addRow(QStringLiteral("Diagnostics Log"), stats.logFile);
     addRow(QStringLiteral("Audio Codec"), stats.audioCodec.isEmpty() ? QStringLiteral("None") : stats.audioCodec);
 
     QString chStr = QString::number(stats.audioChannels) + QStringLiteral(" ch");

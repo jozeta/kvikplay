@@ -4,6 +4,7 @@
 #include <QSvgRenderer>
 #include <QDebug>
 #include <QOpenGLFunctions>
+#include "app/DiagnosticsLog.h"
 
 namespace kvikplay {
 
@@ -58,6 +59,9 @@ void VideoRenderer::requestRenderUpdate() {
 }
 
 void VideoRenderer::initializeGL() {
+    DiagnosticsLog::write("app", QStringLiteral("initializeGL (already set up: %1, mpv: %2)")
+        .arg(m_initialized ? QStringLiteral("yes") : QStringLiteral("no"),
+             m_mpv ? QStringLiteral("yes") : QStringLiteral("no")));
     if (m_initialized || !m_mpv) return;
 
     mpv_opengl_init_params gl_init_params{
@@ -93,6 +97,7 @@ void VideoRenderer::initializeGL() {
     if (rc < 0) {
         qWarning() << "Failed to initialize mpv OpenGL render context:" << mpv_error_string(rc);
         m_diagnostics = gl + QStringLiteral(" · mpv render: FAILED (%1)").arg(QString::fromUtf8(mpv_error_string(rc)));
+        DiagnosticsLog::write("app", QStringLiteral("render setup: ") + m_diagnostics);
         m_setupDone = true;
         emit renderSetupFinished(false); // still play: audio works without it
         return;
@@ -102,6 +107,7 @@ void VideoRenderer::initializeGL() {
     m_initialized = true;
     m_setupDone = true;
     m_diagnostics = gl + QStringLiteral(" · mpv render: ok");
+    DiagnosticsLog::write("app", QStringLiteral("render setup: ") + m_diagnostics);
     emit renderSetupFinished(true);
 }
 

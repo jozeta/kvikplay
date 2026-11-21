@@ -15,6 +15,9 @@ class SettingsManager : public QObject {
 public:
     static SettingsManager& instance();
 
+    // kvikplay.log next to config.json (same folder, KVIKPLAY_CONFIG_DIR honoured).
+    QString logFilePath() const;
+
     void load();
     void save() const;
 

@@ -28,6 +28,12 @@ QString SettingsManager::configFilePath() const {
     return configDir + QStringLiteral("/config.json");
 }
 
+QString SettingsManager::logFilePath() const {
+    const QString dir = QFileInfo(configFilePath()).absolutePath();
+    QDir().mkpath(dir);
+    return dir + QStringLiteral("/kvikplay.log");
+}
+
 void SettingsManager::load() {
     QString path = configFilePath();
     QFile file(path);

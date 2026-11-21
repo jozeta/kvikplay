@@ -54,6 +54,7 @@ struct StreamStats {
     // nowhere) and the OpenGL renderer the window got (filled in by the window).
     QString videoOutput;
     QString renderer;
+    QString logFile;
 };
 
 struct MediaInfo {
