@@ -17,6 +17,13 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 - CI on macOS and Windows (build, tests, ShellCheck, clang-tidy) and security scanning.
 - Screen-reader names and tooltips on the overlay controls.
 
+### Changed
+- Right-click menu redesigned and grouped by task (playback, file, what's playing, window,
+  tools, settings, help). Labels show the current choice ("Speed: 1.25×", "Subtitles: Off"),
+  items that don't apply are hidden, shortcuts are shown, and with no video open the menu is
+  short. New in the menu: Speed, Chapters, Next/Previous in Folder, Window Size, Add Subtitle
+  File… and subtitle timing. Preferences moved into a Settings submenu.
+
 ### Fixed
 - Black window at launch: a file opened before the video surface existed made mpv use its
   "null" video output. Files now open once the surface is ready.

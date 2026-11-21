@@ -1,12 +1,44 @@
 #include "ContextMenu.h"
 #include <QActionGroup>
 #include <QFileInfo>
+#include <cmath>
 
 namespace kvikplay {
 
+namespace {
+
+// Menu text from untrusted strings (file names, track titles): a single '&' would be
+// eaten as an accelerator marker, so it is doubled.
+QString menuText(QString text) {
+    return text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+}
+
+QString speedText(double speed) {
+    // 1.0×, 1.5×, 1.25×: as many decimals as needed, at least one.
+    const bool twoDecimals = std::lround(speed * 100.0) % 10 != 0;
+    return QStringLiteral("%1×").arg(speed, 0, 'f', twoDecimals ? 2 : 1);
+}
+
+QString shortTrackName(const TrackInfo& t) {
+    if (!t.title.isEmpty()) return t.title;
+    if (!t.lang.isEmpty()) return t.lang.toUpper();
+    return QStringLiteral("Track %1").arg(t.id);
+}
+
+#ifdef Q_OS_MACOS
+const QString kFileBrowser = QStringLiteral("Finder");
+const QString kQuitText = QStringLiteral("Quit Kvikplay");
+const QString kTrackpad = QStringLiteral("Trackpad");
+#else
+const QString kFileBrowser = QStringLiteral("Explorer");
+const QString kQuitText = QStringLiteral("Exit Kvikplay");
+const QString kTrackpad = QStringLiteral("Touchpad");
+#endif
+
+} // namespace
+
 ContextMenu::ContextMenu(QWidget* parent)
     : QMenu(parent) {
-
     setStyleSheet(QStringLiteral(
         "QMenu {"
         "  background-color: #1a1c22;"
@@ -37,226 +69,242 @@ ContextMenu::ContextMenu(QWidget* parent)
         "  height: 14px;"
         "}"
     ));
+    rebuild(MenuState{});
+}
 
-    m_openFileAction = addAction(QStringLiteral("Open File..."), this, &ContextMenu::openFileTriggered);
-    m_openFileAction->setShortcut(QKeySequence::Open);
+QAction* ContextMenu::addHinted(QMenu* menu, const QString& text, const QKeySequence& hint) {
+    QAction* a = menu->addAction(text);
+    if (!hint.isEmpty()) {
+        a->setShortcut(hint);
+        a->setShortcutContext(Qt::WidgetShortcut); // only active inside the open menu
+        a->setShortcutVisibleInContextMenu(true);    // macOS hides it otherwise
+    }
+    return a;
+}
 
-    m_playPauseAction = addAction(QStringLiteral("Play"), this, &ContextMenu::playPauseTriggered);
-    m_playPauseAction->setShortcut(QKeySequence(Qt::Key_Space));
+void ContextMenu::rebuild(const MenuState& s) {
+    clear(); // deletes the old actions and submenus parented to them
 
-    m_recentMenu = addMenu(QStringLiteral("Open Recent"));
-    m_recentMenu->setEnabled(false);
+    if (s.hasMedia) {
+        QAction* playPause = addHinted(this, s.playing ? QStringLiteral("Pause") : QStringLiteral("Play"),
+                                       QKeySequence(Qt::Key_Space));
+        connect(playPause, &QAction::triggered, this, &ContextMenu::playPauseTriggered);
+        addSeparator();
+    }
 
-    m_alwaysOnTopAction = addAction(QStringLiteral("Always on Top"));
-    m_alwaysOnTopAction->setCheckable(true);
-    connect(m_alwaysOnTopAction, &QAction::toggled, this, &ContextMenu::alwaysOnTopToggled);
+    addFileItems(s);
 
-    m_fullscreenAction = addAction(QStringLiteral("Fullscreen"), this, &ContextMenu::fullscreenToggled);
-    m_fullscreenAction->setShortcut(QKeySequence(Qt::Key_F));
-
-    m_pipAction = addAction(QStringLiteral("Picture-in-Picture"), this, &ContextMenu::pipToggled);
-    m_pipAction->setShortcut(QKeySequence(Qt::Key_P));
-
-    addSeparator();
-
-    // Track selection submenus
-    m_audioMenu = addMenu(QStringLiteral("Audio"));
-    m_audioMenu->setEnabled(false);
-
-    m_videoMenu = addMenu(QStringLiteral("Video"));
-    m_videoMenu->setEnabled(false);
-
-    m_subtitleMenu = addMenu(QStringLiteral("Subtitles"));
-    m_subtitleMenu->setEnabled(false);
-
-    addSeparator();
-
-    m_dialogueBoostAction = addAction(QStringLiteral("Quiet Dialogue Boost"));
-    m_dialogueBoostAction->setCheckable(true);
-    m_dialogueBoostAction->setShortcut(QKeySequence(Qt::Key_N));
-    connect(m_dialogueBoostAction, &QAction::toggled, this, &ContextMenu::dialogueBoostToggled);
-
-    m_screenshotAction = addAction(QStringLiteral("Take Screenshot"), this, &ContextMenu::screenshotTriggered);
-    m_screenshotAction->setShortcut(QKeySequence(Qt::Key_S));
-
-    m_inspectorAction = addAction(QStringLiteral("Media Inspector"), this, &ContextMenu::inspectorToggled);
-    m_inspectorAction->setShortcut(QKeySequence(Qt::Key_I));
+    if (s.hasMedia) {
+        addSeparator();
+        addPlayingItems(s);
+        addSeparator();
+        addWindowItems(s);
+        addSeparator();
+        addToolItems(s);
+    }
 
     addSeparator();
+    addSettingsAndHelp(s);
+}
 
-    m_reverseTrackpadAction = addAction(QStringLiteral("Reverse Trackpad Scrubbing"));
-    m_reverseTrackpadAction->setCheckable(true);
-    connect(m_reverseTrackpadAction, &QAction::toggled, this, &ContextMenu::reverseTrackpadToggled);
+void ContextMenu::addFileItems(const MenuState& s) {
+    QAction* open = addHinted(this, QStringLiteral("Open File…"), QKeySequence::Open);
+    connect(open, &QAction::triggered, this, &ContextMenu::openFileTriggered);
 
-    m_startFullscreenAction = addAction(QStringLiteral("Start in Fullscreen"));
-    m_startFullscreenAction->setCheckable(true);
-    connect(m_startFullscreenAction, &QAction::toggled, this, &ContextMenu::startInFullscreenToggled);
+    QMenu* recent = addMenu(QStringLiteral("Open Recent"));
+    recent->setEnabled(!s.recentFiles.isEmpty());
+    for (const QString& path : s.recentFiles) {
+        const QString name = QFileInfo(path).fileName();
+        QAction* a = recent->addAction(menuText(name.isEmpty() ? path : name));
+        connect(a, &QAction::triggered, this, [this, path]() { emit recentFileSelected(path); });
+    }
+    if (!s.recentFiles.isEmpty()) {
+        recent->addSeparator();
+        connect(recent->addAction(QStringLiteral("Clear Recent")), &QAction::triggered,
+                this, &ContextMenu::clearRecentTriggered);
+    }
+}
 
-#ifdef Q_OS_MACOS
-    auto* externalMenu = addMenu(QStringLiteral("Opening Files from Finder"));
-#else
-    auto* externalMenu = addMenu(QStringLiteral("Opening Files from Explorer"));
-#endif
-    auto* externalGroup = new QActionGroup(externalMenu);
-    m_externalReplaceAction = externalMenu->addAction(QStringLiteral("Replace Current Video"));
-    m_externalNewWindowAction = externalMenu->addAction(QStringLiteral("Open in New Window"));
-    for (QAction* a : {m_externalReplaceAction, m_externalNewWindowAction}) {
+QMenu* ContextMenu::addTrackMenu(const QString& kind, const std::vector<TrackInfo>& tracks,
+                                 bool withOff, void (ContextMenu::*signal)(int)) {
+    QString current = QStringLiteral("Off");
+    for (const auto& t : tracks) {
+        if (t.selected) current = shortTrackName(t);
+    }
+    QMenu* menu = addMenu(menuText(QStringLiteral("%1: %2").arg(kind, current)));
+    auto* group = new QActionGroup(menu);
+
+    auto addChoice = [&](const QString& text, bool checked, int id) {
+        QAction* a = menu->addAction(text);
         a->setCheckable(true);
-        externalGroup->addAction(a);
-    }
-    m_externalReplaceAction->setChecked(true);
-    connect(m_externalNewWindowAction, &QAction::toggled, this, &ContextMenu::externalOpenNewWindowToggled);
+        a->setChecked(checked);
+        group->addAction(a);
+        connect(a, &QAction::triggered, this, [this, signal, id]() { emit (this->*signal)(id); });
+    };
 
-    addSeparator();
-
-    m_fileAssocAction = addAction(QStringLiteral("File Associations..."), this, &ContextMenu::fileAssociationsTriggered);
-    // "&&": a single & would be eaten as a keyboard-accelerator marker.
-    m_helpAction = addAction(QStringLiteral("Help && Shortcuts..."), this, &ContextMenu::helpTriggered);
-    m_aboutAction = addAction(QStringLiteral("About"), this, &ContextMenu::aboutTriggered);
-
-    addSeparator();
-
-    m_closeAction = addAction(QStringLiteral("Close"), this, &ContextMenu::closeTriggered);
-    m_closeAction->setShortcut(QKeySequence(Qt::Key_Q));
-}
-
-void ContextMenu::setPlaying(bool playing) {
-    m_playPauseAction->setText(playing ? QStringLiteral("Pause") : QStringLiteral("Play"));
-}
-
-void ContextMenu::setAlwaysOnTop(bool onTop) {
-    m_alwaysOnTopAction->setChecked(onTop);
-}
-
-void ContextMenu::setFullscreen(bool fullscreen) {
-    m_fullscreenAction->setText(fullscreen ? QStringLiteral("Exit Fullscreen") : QStringLiteral("Fullscreen"));
-}
-
-void ContextMenu::setReverseTrackpad(bool reversed) {
-    m_reverseTrackpadAction->setChecked(reversed);
-}
-
-void ContextMenu::setDialogueBoost(bool enabled) {
-    if (m_dialogueBoostAction) {
-        m_dialogueBoostAction->setChecked(enabled);
-    }
-}
-
-void ContextMenu::setExternalOpenNewWindow(bool newWindow) {
-    QSignalBlocker block(m_externalNewWindowAction); // reflect the setting, don't re-emit
-    (newWindow ? m_externalNewWindowAction : m_externalReplaceAction)->setChecked(true);
-}
-
-void ContextMenu::setStartInFullscreen(bool on) {
-    QSignalBlocker block(m_startFullscreenAction);
-    m_startFullscreenAction->setChecked(on);
-}
-
-void ContextMenu::setRecentFiles(const QStringList& files) {
-    m_recentMenu->clear();
-    if (files.isEmpty()) {
-        m_recentMenu->setEnabled(false);
-        return;
-    }
-
-    m_recentMenu->setEnabled(true);
-    for (const auto& filePath : files) {
-        QFileInfo fi(filePath);
-        QString display = fi.fileName();
-        if (display.isEmpty()) {
-            display = filePath;
-        }
-        auto* act = m_recentMenu->addAction(display);
-        act->setToolTip(filePath);
-        connect(act, &QAction::triggered, this, [this, filePath]() {
-            emit recentFileSelected(filePath);
-        });
-    }
-
-    m_recentMenu->addSeparator();
-    auto* clearAct = m_recentMenu->addAction(QStringLiteral("Clear Recent"));
-    connect(clearAct, &QAction::triggered, this, &ContextMenu::clearRecentTriggered);
-}
-
-void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,
-                            const std::vector<TrackInfo>& video,
-                            const std::vector<TrackInfo>& sub) {
-    // 1. Audio tracks
-    m_audioMenu->clear();
-    if (audio.size() <= 1) {
-        m_audioMenu->setEnabled(false);
-    } else {
-        m_audioMenu->setEnabled(true);
-        if (!m_audioGroup) m_audioGroup = new QActionGroup(this);
-        auto* group = m_audioGroup;
-        for (const auto& t : audio) {
-            auto* act = m_audioMenu->addAction(t.displayName());
-            act->setCheckable(true);
-            act->setChecked(t.selected);
-            group->addAction(act);
-            int trackId = t.id;
-            connect(act, &QAction::triggered, this, [this, trackId]() {
-                emit audioTrackSelected(trackId);
-            });
-        }
-    }
-
-    // 2. Video tracks
-    m_videoMenu->clear();
-    if (video.size() <= 1) {
-        m_videoMenu->setEnabled(false);
-    } else {
-        m_videoMenu->setEnabled(true);
-        if (!m_videoGroup) m_videoGroup = new QActionGroup(this);
-        auto* group = m_videoGroup;
-        for (const auto& t : video) {
-            auto* act = m_videoMenu->addAction(t.displayName());
-            act->setCheckable(true);
-            act->setChecked(t.selected);
-            group->addAction(act);
-            int trackId = t.id;
-            connect(act, &QAction::triggered, this, [this, trackId]() {
-                emit videoTrackSelected(trackId);
-            });
-        }
-    }
-
-    // 3. Subtitles
-    m_subtitleMenu->clear();
-    if (sub.empty()) {
-        m_subtitleMenu->setEnabled(false);
-    } else {
-        m_subtitleMenu->setEnabled(true);
-        if (!m_subtitleGroup) m_subtitleGroup = new QActionGroup(this);
-        auto* group = m_subtitleGroup;
-
-        // Disabled option
+    if (withOff) {
         bool anySelected = false;
-        for (const auto& t : sub) {
-            if (t.selected) anySelected = true;
-        }
+        for (const auto& t : tracks) anySelected = anySelected || t.selected;
+        addChoice(QStringLiteral("Off"), !anySelected, 0);
+        if (!tracks.empty()) menu->addSeparator();
+    }
+    for (const auto& t : tracks) {
+        addChoice(menuText(t.displayName()), t.selected, t.id);
+    }
+    return menu;
+}
 
-        auto* offAct = m_subtitleMenu->addAction(QStringLiteral("Off"));
-        offAct->setCheckable(true);
-        offAct->setChecked(!anySelected);
-        group->addAction(offAct);
-        connect(offAct, &QAction::triggered, this, [this]() {
-            emit subtitleTrackSelected(0);
-        });
+void ContextMenu::addPlayingItems(const MenuState& s) {
+    // Speed
+    QMenu* speed = addMenu(QStringLiteral("Speed: %1").arg(speedText(s.speed)));
+    auto* speedGroup = new QActionGroup(speed);
+    for (double v : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0}) {
+        QAction* a = speed->addAction(speedText(v));
+        a->setCheckable(true);
+        a->setChecked(std::abs(v - s.speed) < 0.001);
+        speedGroup->addAction(a);
+        connect(a, &QAction::triggered, this, [this, v]() { emit speedSelected(v); });
+    }
+    speed->addSeparator();
+    QAction* slower = addHinted(speed, QStringLiteral("Slower"), QKeySequence(Qt::Key_Minus));
+    connect(slower, &QAction::triggered, this, [this, s]() {
+        emit speedSelected(std::max(0.25, std::round((s.speed - 0.1) * 10.0) / 10.0));
+    });
+    QAction* faster = addHinted(speed, QStringLiteral("Faster"), QKeySequence(Qt::Key_Equal));
+    connect(faster, &QAction::triggered, this, [this, s]() {
+        emit speedSelected(std::min(4.0, std::round((s.speed + 0.1) * 10.0) / 10.0));
+    });
 
-        m_subtitleMenu->addSeparator();
+    // Tracks: only menus where there is a choice to make.
+    if (s.audioTracks.size() > 1) {
+        addTrackMenu(QStringLiteral("Audio"), s.audioTracks, false, &ContextMenu::audioTrackSelected);
+    }
+    if (s.videoTracks.size() > 1) {
+        addTrackMenu(QStringLiteral("Video"), s.videoTracks, false, &ContextMenu::videoTrackSelected);
+    }
+    QMenu* subs = addTrackMenu(QStringLiteral("Subtitles"), s.subtitleTracks, true,
+                               &ContextMenu::subtitleTrackSelected);
+    subs->addSeparator();
+    connect(subs->addAction(QStringLiteral("Add Subtitle File…")), &QAction::triggered,
+            this, &ContextMenu::addSubtitleFileTriggered);
+    QAction* earlier = addHinted(subs, QStringLiteral("Show 100 ms Earlier"), QKeySequence(Qt::Key_Z));
+    connect(earlier, &QAction::triggered, this, [this]() { emit subtitleDelayAdjusted(-0.1); });
+    QAction* later = addHinted(subs, QStringLiteral("Show 100 ms Later"), QKeySequence(Qt::Key_X));
+    connect(later, &QAction::triggered, this, [this]() { emit subtitleDelayAdjusted(0.1); });
+    if (std::abs(s.subtitleDelay) > 0.0005) {
+        QAction* reset = subs->addAction(QStringLiteral("Reset Timing (now %1 ms)")
+                                             .arg(static_cast<int>(std::round(s.subtitleDelay * 1000.0))));
+        connect(reset, &QAction::triggered, this, &ContextMenu::subtitleDelayResetTriggered);
+    }
 
-        for (const auto& t : sub) {
-            auto* act = m_subtitleMenu->addAction(t.displayName());
-            act->setCheckable(true);
-            act->setChecked(t.selected);
-            group->addAction(act);
-            int trackId = t.id;
-            connect(act, &QAction::triggered, this, [this, trackId]() {
-                emit subtitleTrackSelected(trackId);
-            });
+    // Chapters
+    if (!s.chapters.empty()) {
+        const int n = static_cast<int>(s.chapters.size());
+        const int cur = std::clamp(s.currentChapter, 0, n - 1);
+        QMenu* chapters = addMenu(menuText(QStringLiteral("Chapter %1/%2: %3")
+                                               .arg(cur + 1).arg(n).arg(s.chapters[cur].title)));
+        auto* group = new QActionGroup(chapters);
+        for (int i = 0; i < n; ++i) {
+            const ChapterInfo& ch = s.chapters[i];
+            QAction* a = chapters->addAction(menuText(QStringLiteral("%1. %2").arg(i + 1).arg(ch.title)));
+            a->setCheckable(true);
+            a->setChecked(i == cur);
+            group->addAction(a);
+            const double start = ch.time;
+            connect(a, &QAction::triggered, this, [this, start]() { emit chapterSelected(start); });
         }
     }
+
+    // Folder
+    QAction* next = addHinted(this, QStringLiteral("Next in Folder"), QKeySequence(Qt::Key_BracketRight));
+    next->setEnabled(s.hasNextInFolder);
+    connect(next, &QAction::triggered, this, &ContextMenu::nextInFolderTriggered);
+    QAction* prev = addHinted(this, QStringLiteral("Previous in Folder"), QKeySequence(Qt::Key_BracketLeft));
+    prev->setEnabled(s.hasPreviousInFolder);
+    connect(prev, &QAction::triggered, this, &ContextMenu::previousInFolderTriggered);
+}
+
+void ContextMenu::addWindowItems(const MenuState& s) {
+    QAction* fullscreen = addHinted(this, QStringLiteral("Fullscreen"), QKeySequence(Qt::Key_F));
+    fullscreen->setCheckable(true);
+    fullscreen->setChecked(s.fullscreen);
+    connect(fullscreen, &QAction::triggered, this, &ContextMenu::fullscreenToggled);
+
+    QAction* pip = addHinted(this, QStringLiteral("Picture-in-Picture"), QKeySequence(Qt::Key_P));
+    pip->setCheckable(true);
+    pip->setChecked(s.pictureInPicture);
+    connect(pip, &QAction::triggered, this, &ContextMenu::pipToggled);
+
+    QAction* onTop = addAction(QStringLiteral("Always on Top"));
+    onTop->setCheckable(true);
+    onTop->setChecked(s.alwaysOnTop);
+    connect(onTop, &QAction::toggled, this, &ContextMenu::alwaysOnTopToggled);
+
+    QMenu* size = addMenu(QStringLiteral("Window Size"));
+    const struct { const char* text; double scale; Qt::Key key; } sizes[] = {
+        {"Original Size (100%)", 1.0, Qt::Key_1},
+        {"Half Size (50%)", 0.5, Qt::Key_2},
+        {"Quarter Size (25%)", 0.25, Qt::Key_4},
+    };
+    for (const auto& sz : sizes) {
+        QAction* a = addHinted(size, QString::fromUtf8(sz.text), QKeySequence(sz.key));
+        const double scale = sz.scale;
+        connect(a, &QAction::triggered, this, [this, scale]() { emit windowScaleSelected(scale); });
+    }
+}
+
+void ContextMenu::addToolItems(const MenuState& s) {
+    QAction* shot = addHinted(this, QStringLiteral("Take Screenshot"), QKeySequence(Qt::Key_S));
+    connect(shot, &QAction::triggered, this, &ContextMenu::screenshotTriggered);
+
+    QAction* boost = addHinted(this, QStringLiteral("Dialogue Boost"), QKeySequence(Qt::Key_N));
+    boost->setCheckable(true);
+    boost->setChecked(s.dialogueBoost);
+    connect(boost, &QAction::toggled, this, &ContextMenu::dialogueBoostToggled);
+
+    QAction* inspector = addHinted(this, QStringLiteral("Media Inspector"), QKeySequence(Qt::Key_I));
+    inspector->setCheckable(true);
+    inspector->setChecked(s.inspectorVisible);
+    connect(inspector, &QAction::triggered, this, &ContextMenu::inspectorToggled);
+}
+
+void ContextMenu::addSettingsAndHelp(const MenuState& s) {
+    QMenu* settings = addMenu(QStringLiteral("Settings"));
+
+    QAction* reverse = settings->addAction(QStringLiteral("Reverse %1 Scrubbing").arg(kTrackpad));
+    reverse->setCheckable(true);
+    reverse->setChecked(s.reverseTrackpad);
+    connect(reverse, &QAction::toggled, this, &ContextMenu::reverseTrackpadToggled);
+
+    QAction* startFs = settings->addAction(QStringLiteral("Start in Fullscreen"));
+    startFs->setCheckable(true);
+    startFs->setChecked(s.startInFullscreen);
+    connect(startFs, &QAction::toggled, this, &ContextMenu::startInFullscreenToggled);
+
+    QMenu* external = settings->addMenu(QStringLiteral("Opening Files from %1").arg(kFileBrowser));
+    auto* group = new QActionGroup(external);
+    QAction* replace = external->addAction(QStringLiteral("Replace Current Video"));
+    QAction* newWindow = external->addAction(QStringLiteral("Open in New Window"));
+    for (QAction* a : {replace, newWindow}) {
+        a->setCheckable(true);
+        group->addAction(a);
+    }
+    (s.externalOpenNewWindow ? newWindow : replace)->setChecked(true);
+    connect(replace, &QAction::triggered, this, [this]() { emit externalOpenNewWindowToggled(false); });
+    connect(newWindow, &QAction::triggered, this, [this]() { emit externalOpenNewWindowToggled(true); });
+
+    settings->addSeparator();
+    connect(settings->addAction(QStringLiteral("File Associations…")), &QAction::triggered,
+            this, &ContextMenu::fileAssociationsTriggered);
+
+    // "&&": a single & would be eaten as an accelerator marker.
+    connect(addAction(QStringLiteral("Help && Shortcuts…")), &QAction::triggered,
+            this, &ContextMenu::helpTriggered);
+    connect(addAction(QStringLiteral("About Kvikplay")), &QAction::triggered,
+            this, &ContextMenu::aboutTriggered);
+    addSeparator();
+    QAction* quit = addHinted(this, kQuitText, QKeySequence(Qt::Key_Q));
+    connect(quit, &QAction::triggered, this, &ContextMenu::closeTriggered);
 }
 
 } // namespace kvikplay

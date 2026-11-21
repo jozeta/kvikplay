@@ -34,7 +34,7 @@ decoding and HDR tone mapping. The interface is Qt 6.
 <table>
   <tr>
     <td align="center" width="33%"><img src="docs/screenshots/playback.jpg" alt="Kvikplay playing a video with the overlay visible"><br><sub>Playback with the overlay: file name, timeline, time, controls and volume</sub></td>
-    <td align="center" width="33%"><img src="docs/screenshots/menu.jpg" alt="The right-click menu over a playing video"><br><sub>Right-click-and-hold menu with tracks, options and recent files</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/menu.jpg" alt="The right-click menu over a playing video"><br><sub>Right-click-and-hold menu, grouped by task, with shortcuts</sub></td>
     <td align="center" width="33%"><img src="docs/screenshots/inspector.jpg" alt="The media inspector showing codec and stream details"><br><sub>Media inspector (<code>I</code>): codecs, resolution, bitrates, hardware decoder</sub></td>
   </tr>
 </table>
@@ -152,7 +152,21 @@ with its first media file.
 **Play and pause.** `Space`, a quick right-click (or two-finger click), or the play button. When
 the window isn't focused, the first click only focuses it.
 
-**Open the menu.** Right-click and hold for half a second (or two-finger click and hold).
+**Open the menu.** Right-click and hold for half a second (or two-finger click and hold). The
+menu is grouped by task:
+
+| Group | Items |
+|---|---|
+| Playback | Play / Pause |
+| File | Open File…, Open Recent |
+| What's playing | Speed (shows the current speed), Audio and Video (only when there is more than one track), Subtitles (tracks, Add Subtitle File…, timing), Chapter (only when the file has chapters), Next / Previous in Folder |
+| Window | Fullscreen, Picture-in-Picture, Always on Top, Window Size |
+| Tools | Take Screenshot, Dialogue Boost, Media Inspector |
+| Settings | Reverse Trackpad (Touchpad) Scrubbing, Start in Fullscreen, Opening Files from Finder/Explorer, File Associations… |
+| Help | Help & Shortcuts…, About Kvikplay, Quit (Exit on Windows) |
+
+With no video open it shows only Open File, Open Recent, Settings, Help, About and Quit.
+Shortcuts are listed next to each item.
 
 **Seek.** Arrow keys (±10 s, with `Shift` ±30 s), scroll wheel, two-finger swipe left/right, or click
 and drag on the timeline. Hover the timeline to see a thumbnail.

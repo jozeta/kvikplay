@@ -49,8 +49,8 @@ keep **every** screenshot on that same file. When retaking one, retake any older
 different video too.
 
 Current shots (2026-11-21, macOS): `playback.jpg`, `menu.jpg`, `inspector.jpg` (retaken after the
-background fix), saved as 1280 px JPEG. Still owed: a timeline hover-preview shot (needs a real
-mouse, see below), and `menu.jpg` again once the menu redesign lands.
+background fix) and `menu.jpg` (the redesigned menu), saved as 1280 px JPEG. Still owed: a
+timeline hover-preview shot (needs a real mouse, see below).
 
 How they were taken: run the app with the file above, then drive it with synthetic `CGEvent`
 mouse and key events. The window must be clicked (focused) before hovering shows the overlay.

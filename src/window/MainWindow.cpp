@@ -148,7 +148,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::clearRecentTriggered, this, [this]() {
         SettingsManager::instance().clearRecentFiles();
         SettingsManager::instance().save();
-        m_contextMenu->setRecentFiles({});
     });
     connect(m_contextMenu, &ContextMenu::screenshotTriggered, this, [this]() {
         m_player->takeScreenshot(false);
@@ -156,6 +155,32 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_contextMenu, &ContextMenu::fileAssociationsTriggered, this, &MainWindow::showFileAssociationsDialog);
     connect(m_contextMenu, &ContextMenu::aboutTriggered, this, &MainWindow::showAboutDialog);
     connect(m_contextMenu, &ContextMenu::closeTriggered, this, &QWidget::close);
+    connect(m_contextMenu, &ContextMenu::speedSelected, this, [this](double speed) {
+        setSpeedAndRemember(speed);
+        m_overlay->showOsd(QStringLiteral("Speed %1x").arg(speed, 0, 'f', speed * 10 == std::round(speed * 10) ? 1 : 2));
+    });
+    connect(m_contextMenu, &ContextMenu::chapterSelected, this, [this](double start) {
+        m_player->seekAbsolute(start, true);
+    });
+    connect(m_contextMenu, &ContextMenu::nextInFolderTriggered, this, &MainWindow::playNextInFolder);
+    connect(m_contextMenu, &ContextMenu::previousInFolderTriggered, this, &MainWindow::playPreviousInFolder);
+    connect(m_contextMenu, &ContextMenu::windowScaleSelected, this, &MainWindow::applyWindowScale);
+    connect(m_contextMenu, &ContextMenu::addSubtitleFileTriggered, this, [this]() {
+        const QString dir = m_currentFilePath.isEmpty() ? QDir::homePath() : QFileInfo(m_currentFilePath).absolutePath();
+        const QString file = QFileDialog::getOpenFileName(this, QStringLiteral("Add Subtitle File"), dir,
+            QStringLiteral("Subtitles (*.srt *.ass *.ssa *.vtt *.sub *.idx)"));
+        if (!file.isEmpty()) {
+            m_player->addSubtitleTrack(file); // OSD once mpv has loaded it
+        }
+    });
+    connect(m_contextMenu, &ContextMenu::subtitleDelayAdjusted, this, [this](double delta) {
+        m_player->adjustSubtitleDelay(delta);
+        m_overlay->showOsd(QStringLiteral("Sub Delay: %1ms").arg(static_cast<int>(std::round(m_player->subtitleDelay() * 1000))));
+    });
+    connect(m_contextMenu, &ContextMenu::subtitleDelayResetTriggered, this, [this]() {
+        m_player->setSubtitleDelay(0.0);
+        m_overlay->showOsd(QStringLiteral("Sub Delay: 0ms"));
+    });
     connect(m_contextMenu, &ContextMenu::audioTrackSelected, m_player.get(), &MediaPlayer::setAudioTrack);
     connect(m_contextMenu, &ContextMenu::videoTrackSelected, m_player.get(), &MediaPlayer::setVideoTrack);
     connect(m_contextMenu, &ContextMenu::subtitleTrackSelected, m_player.get(), &MediaPlayer::setSubtitleTrack);
@@ -236,14 +261,9 @@ bool MainWindow::initialize(bool cascade) {
 
     m_overlay->setVolume(settings.volume());
     m_overlay->setMuted(settings.isMuted());
-    m_contextMenu->setReverseTrackpad(settings.reverseTrackpadScrubbing());
-    m_contextMenu->setRecentFiles(settings.recentFiles());
-    m_contextMenu->setExternalOpenNewWindow(settings.externalOpenInNewWindow());
-    m_contextMenu->setStartInFullscreen(settings.startInFullscreen());
 
     bool dBoost = settings.dialogueBoost();
     m_player->setDialogueBoost(dBoost);
-    m_contextMenu->setDialogueBoost(dBoost);
 
     // Native platform window setup
     if (m_platform) {
@@ -319,7 +339,6 @@ void MainWindow::openFile(const QString& filePath) {
         // A recent file that was moved or deleted: drop it from the list.
         SettingsManager::instance().removeRecentFile(filePath);
         SettingsManager::instance().save();
-        m_contextMenu->setRecentFiles(SettingsManager::instance().recentFiles());
         m_overlay->showOsd(QStringLiteral("File not found: %1").arg(fi.fileName()));
         return;
     }
@@ -345,7 +364,6 @@ void MainWindow::openFile(const QString& filePath) {
     m_currentFilePath = fi.absoluteFilePath();
     SettingsManager::instance().addRecentFile(m_currentFilePath);
     SettingsManager::instance().save();
-    m_contextMenu->setRecentFiles(SettingsManager::instance().recentFiles());
 
     if (m_thumbnailWorker) {
         m_thumbnailWorker->openFile(m_currentFilePath);
@@ -439,13 +457,11 @@ void MainWindow::onMediaLoaded(const MediaInfo& info) {
 void MainWindow::onTracksChanged(const std::vector<TrackInfo>& audio,
                                  const std::vector<TrackInfo>& video,
                                  const std::vector<TrackInfo>& sub) {
-    m_contextMenu->setTracks(audio, video, sub);
 }
 
 void MainWindow::onPlaybackStateChanged(PlaybackState state) {
     bool isPlaying = (state == PlaybackState::Playing);
     m_overlay->setPlaying(isPlaying);
-    m_contextMenu->setPlaying(isPlaying);
 
     if (m_platform) {
         m_platform->setDisplaySleepInhibited(isPlaying);
@@ -490,7 +506,6 @@ void MainWindow::onMediaEnded() {
     SettingsManager::instance().clearResumePosition(m_currentFilePath);
     SettingsManager::instance().save();
     m_overlay->setPlaying(false);
-    m_contextMenu->setPlaying(false);
     playNextInFolder();
 }
 
@@ -521,7 +536,6 @@ void MainWindow::toggleDialogueBoost() {
     SettingsManager::instance().setDialogueBoost(next);
     SettingsManager::instance().save();
     m_player->setDialogueBoost(next);
-    m_contextMenu->setDialogueBoost(next);
     m_overlay->showOsd(next ? QStringLiteral("Dialogue Boost: ON") : QStringLiteral("Dialogue Boost: OFF"));
 }
 
@@ -627,7 +641,6 @@ void MainWindow::showHelpDialog() {
 
 void MainWindow::setAlwaysOnTop(bool top) {
     m_isAlwaysOnTop = top;
-    m_contextMenu->setAlwaysOnTop(top);
     SettingsManager::instance().setAlwaysOnTop(top);
 
     // Changed on the existing native window: QWidget::setWindowFlags() would destroy
@@ -643,7 +656,6 @@ void MainWindow::toggleFullscreen() {
     if (m_isFullscreen) {
         // Exit fullscreen -> restore windowed mode size and position
         m_isFullscreen = false;
-        m_contextMenu->setFullscreen(false);
         showNormal();
         if (m_normalGeometry.isValid()) {
             setGeometry(m_normalGeometry);
@@ -656,7 +668,6 @@ void MainWindow::toggleFullscreen() {
         // Enter fullscreen -> remember windowed size & position
         m_normalGeometry = geometry();
         m_isFullscreen = true;
-        m_contextMenu->setFullscreen(true);
         if (m_platform) {
             m_platform->setWindowRounded(this, false);
         }
@@ -757,6 +768,40 @@ void MainWindow::fitAndPositionWindow(const QSize& targetSize, const QPoint& pre
     m_normalGeometry = geometry();
 }
 
+MenuState MainWindow::buildMenuState() {
+    auto& settings = SettingsManager::instance();
+    MenuState s;
+    s.hasMedia = m_player->hasMedia();
+    s.playing = m_player->state() == PlaybackState::Playing;
+    s.speed = m_player->speed();
+    s.audioTracks = m_player->audioTracks();
+    s.videoTracks = m_player->videoTracks();
+    s.subtitleTracks = m_player->subtitleTracks();
+    s.subtitleDelay = m_player->subtitleDelay();
+    s.chapters = m_player->mediaInfo().chapters;
+    s.currentChapter = m_player->currentChapter();
+    if (!m_currentFilePath.isEmpty()) {
+        // Cached by FolderIndex (prefetched when the file was opened): no disk scan here.
+        s.hasNextInFolder = !m_folderIndex.next(m_currentFilePath).isEmpty();
+        s.hasPreviousInFolder = !m_folderIndex.previous(m_currentFilePath).isEmpty();
+    }
+    s.fullscreen = m_isFullscreen;
+    s.pictureInPicture = m_isPiP;
+    s.alwaysOnTop = m_isAlwaysOnTop;
+    s.dialogueBoost = settings.dialogueBoost();
+    s.inspectorVisible = m_inspector && m_inspector->isVisible();
+    s.reverseTrackpad = settings.reverseTrackpadScrubbing();
+    s.startInFullscreen = settings.startInFullscreen();
+    s.externalOpenNewWindow = settings.externalOpenInNewWindow();
+    s.recentFiles = settings.recentFiles();
+    return s;
+}
+
+void MainWindow::showContextMenu(const QPoint& globalPos) {
+    m_contextMenu->rebuild(buildMenuState());
+    m_contextMenu->exec(globalPos);
+}
+
 void MainWindow::onOsdInactivityTimeout() {
     m_overlay->hideOverlay();
     if (m_isFullscreen) {
@@ -766,8 +811,7 @@ void MainWindow::onOsdInactivityTimeout() {
 
 void MainWindow::onRightClickHoldTimeout() {
     m_rightClickMenuShown = true;
-    m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
-    m_contextMenu->exec(m_rightPressGlobalPos);
+    showContextMenu(m_rightPressGlobalPos);
 }
 
 void MainWindow::updateRendererGeometry() {
@@ -1071,8 +1115,7 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
 
 void MainWindow::contextMenuEvent(QContextMenuEvent* event) {
     if (event->reason() == QContextMenuEvent::Keyboard) {
-        m_contextMenu->setReverseTrackpad(SettingsManager::instance().reverseTrackpadScrubbing());
-        m_contextMenu->exec(event->globalPos());
+        showContextMenu(event->globalPos());
     }
     event->accept();
 }

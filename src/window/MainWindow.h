@@ -106,6 +106,8 @@ private:
     void setSpeedAndRemember(double speed);
     void updateNowPlayingMetadata();
     void openFileDialog();
+    MenuState buildMenuState();
+    void showContextMenu(const QPoint& globalPos);
 
     std::unique_ptr<MediaPlayer> m_player;
     std::unique_ptr<PlatformIntegration> m_platform;
