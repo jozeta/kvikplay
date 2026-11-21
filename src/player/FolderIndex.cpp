@@ -45,9 +45,9 @@ QStringList FolderIndex::files(const QString& dirPath) {
 }
 
 void FolderIndex::prefetch(const QString& dirPath) {
-    // The index must outlive queued work: MainWindow owns it for the app's lifetime,
-    // and QThreadPool::globalInstance() is drained before the app exits.
-    QThreadPool::globalInstance()->start([this, dirPath]() { files(dirPath); });
+    // Our own pool (see the header): it is waited for before this index is destroyed.
+    m_pool.setMaxThreadCount(1);
+    m_pool.start([this, dirPath]() { files(dirPath); });
 }
 
 QString FolderIndex::next(const QString& filePath) {

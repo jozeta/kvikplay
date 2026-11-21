@@ -57,5 +57,14 @@ int main() {
         CHECK(ch.toUnregister == (QStringList{".avi", ".mp4"})); // sorted, unticked ones only
     }
 
+    // Security review: a NUL inside a path would pass the extension check but reach mpv
+    // cut short at the NUL ("x.m3u"). Such paths are never supported.
+    {
+        QString sneaky = QStringLiteral("/tmp/x.m3u");
+        sneaky.append(QChar(0));
+        sneaky.append(QStringLiteral(".mkv"));
+        CHECK(!kvikplay::FormatRegistry::instance().isSupported(sneaky));
+    }
+
     return 0;
 }

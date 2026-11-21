@@ -2,6 +2,7 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <iterator>
 #include <string>
 #endif
 
@@ -43,9 +44,27 @@ bool anotherInstanceRunning() {
     return g_mutex && GetLastError() == ERROR_ALREADY_EXISTS;
 }
 
+// The receiving window must belong to a process running this same Kvikplay
+// executable; anyone can register a window class with our name.
+bool isOurExecutable(DWORD pid) {
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc) return false;
+    wchar_t theirs[MAX_PATH * 4] = {};
+    DWORD len = static_cast<DWORD>(std::size(theirs));
+    const bool ok = QueryFullProcessImageNameW(proc, 0, theirs, &len) != 0;
+    CloseHandle(proc);
+    if (!ok) return false;
+    wchar_t ours[MAX_PATH * 4] = {};
+    if (GetModuleFileNameW(nullptr, ours, static_cast<DWORD>(std::size(ours))) == 0) return false;
+    return CompareStringOrdinal(theirs, static_cast<int>(len), ours, -1, TRUE) == CSTR_EQUAL;
+}
+
 bool sendToRunningInstance(const QString& filePath) {
     HWND target = FindWindowExW(HWND_MESSAGE, nullptr, kWindowClass, nullptr);
     if (!target) return false;
+    DWORD targetPid = 0;
+    GetWindowThreadProcessId(target, &targetPid);
+    if (targetPid == 0 || !isOurExecutable(targetPid)) return false; // start normally instead
 
     const std::wstring path = filePath.toStdWString();
     COPYDATASTRUCT cds{};
@@ -53,8 +72,8 @@ bool sendToRunningInstance(const QString& filePath) {
     cds.cbData = static_cast<DWORD>(path.size() * sizeof(wchar_t));
     cds.lpData = const_cast<wchar_t*>(path.data());
 
-    // Let the running instance bring its window to the front.
-    AllowSetForegroundWindow(ASFW_ANY);
+    // Let that instance (and only it) bring its window to the front.
+    AllowSetForegroundWindow(targetPid);
     DWORD_PTR result = 0;
     const LRESULT ok = SendMessageTimeoutW(target, WM_COPYDATA, 0, reinterpret_cast<LPARAM>(&cds),
                                            SMTO_ABORTIFHUNG, 3000, &result);

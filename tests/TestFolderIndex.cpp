@@ -12,7 +12,7 @@ using namespace kvikplay;
 
 static void touch(const QString& path) {
     QFile f(path);
-    f.open(QIODevice::WriteOnly);
+    (void)f.open(QIODevice::WriteOnly); // an empty file is all the test needs
 }
 
 int main(int argc, char* argv[]) {
@@ -46,8 +46,13 @@ int main(int argc, char* argv[]) {
     std::cout << "[TestFolderIndex] Prefetch fills the cache in the background..." << std::endl;
     FolderIndex warm;
     warm.prefetch(d);
-    QThreadPool::globalInstance()->waitForDone(5000);
     CHECK(warm.files(d).size() == 4);
+
+    std::cout << "[TestFolderIndex] Destroying right after a prefetch is safe..." << std::endl;
+    for (int i = 0; i < 50; ++i) {
+        FolderIndex shortLived;
+        shortLived.prefetch(d); // the destructor must wait for this task
+    }
 
     std::cout << "[TestFolderIndex] All tests passed!" << std::endl;
     return 0;

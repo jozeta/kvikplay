@@ -82,6 +82,9 @@ std::vector<FormatInfo> FormatRegistry::formatsByCategory(FormatCategory categor
 }
 
 bool FormatRegistry::isSupported(const QString& filePathOrExt) const {
+    // A NUL would pass the extension check but reach mpv as a C string cut short
+    // at the NUL ("x.m3u\0.mkv" -> "x.m3u"), so such a path is never supported.
+    if (filePathOrExt.contains(QChar(0))) return false;
     return m_supportedExtensions.contains(extractExtension(filePathOrExt));
 }
 

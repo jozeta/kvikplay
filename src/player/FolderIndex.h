@@ -5,6 +5,7 @@
 #include <QMutex>
 #include <QString>
 #include <QStringList>
+#include <QThreadPool>
 
 namespace kvikplay {
 
@@ -30,6 +31,9 @@ private:
     };
     QMutex m_mutex;
     QHash<QString, Entry> m_cache;
+    // Declared last so it is destroyed first: ~QThreadPool waits for a running
+    // listing (e.g. a slow network folder) before m_cache and m_mutex go away.
+    QThreadPool m_pool;
 };
 
 } // namespace kvikplay

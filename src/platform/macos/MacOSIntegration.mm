@@ -43,7 +43,11 @@ MacOSIntegration::~MacOSIntegration() {
     }
     if (m_hoverArea) {
         NSTrackingArea* area = (NSTrackingArea*)m_hoverArea;
-        if (m_hoverView) [(NSView*)m_hoverView removeTrackingArea:area];
+        if (m_hoverView) {
+            [(NSView*)m_hoverView removeTrackingArea:area];
+            [(NSView*)m_hoverView release];
+            m_hoverView = nullptr;
+        }
         [area release];
         m_hoverArea = nullptr;
     }
@@ -239,7 +243,7 @@ void MacOSIntegration::installHoverObserver(QWidget* widget, std::function<void(
     [view addTrackingArea:area];
     m_hoverTarget = (void*)target;
     m_hoverArea = (void*)area;
-    m_hoverView = (void*)view;
+    m_hoverView = (void*)[view retain]; // released with the tracking area
 }
 
 void MacOSIntegration::setDisplaySleepInhibited(bool inhibit) {

@@ -31,7 +31,7 @@ private:
     void* m_activationObserver{nullptr}; // id<NSObject> from NSNotificationCenter, retained
     void* m_hoverTarget{nullptr};        // KvikplayHoverTarget, retained
     void* m_hoverArea{nullptr};          // NSTrackingArea, retained
-    void* m_hoverView{nullptr};          // NSView the area belongs to (not retained)
+    void* m_hoverView{nullptr};          // NSView the area belongs to, retained
 };
 
 } // namespace kvikplay

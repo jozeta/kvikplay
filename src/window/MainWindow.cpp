@@ -21,6 +21,7 @@
 #include <QFileDialog>
 #include <QStandardPaths>
 #include <QProcess>
+#include <QPointer>
 #include <algorithm>
 #include <utility>
 #include <cmath>
@@ -261,36 +262,22 @@ bool MainWindow::initialize(bool cascade) {
             m_osdTimer->start(5000);
         });
 
+        // Media keys can arrive on another thread (SMTC) and, in theory, during
+        // shutdown: the QPointer makes a late one a no-op instead of a use-after-free.
+        QPointer<MainWindow> self(this);
+        auto onGui = [self](auto fn) {
+            QMetaObject::invokeMethod(qApp, [self, fn]() {
+                if (self) fn(self.data());
+            }, Qt::QueuedConnection);
+        };
         MediaKeyCallbacks callbacks;
-        callbacks.onPlay = [this]() {
-            QMetaObject::invokeMethod(this, [this]() {
-                m_player->play();
-            }, Qt::QueuedConnection);
-        };
-        callbacks.onPause = [this]() {
-            QMetaObject::invokeMethod(this, [this]() {
-                m_player->pause();
-            }, Qt::QueuedConnection);
-        };
-        callbacks.onTogglePlayPause = [this]() {
-            QMetaObject::invokeMethod(this, [this]() {
-                m_player->togglePlayPause();
-            }, Qt::QueuedConnection);
-        };
-        callbacks.onNextTrack = [this]() {
-            QMetaObject::invokeMethod(this, [this]() {
-                playNextInFolder();
-            }, Qt::QueuedConnection);
-        };
-        callbacks.onPreviousTrack = [this]() {
-            QMetaObject::invokeMethod(this, [this]() {
-                playPreviousInFolder();
-            }, Qt::QueuedConnection);
-        };
-        callbacks.onSeek = [this](double seconds) {
-            QMetaObject::invokeMethod(this, [this, seconds]() {
-                m_player->seekAbsolute(seconds, true);
-            }, Qt::QueuedConnection);
+        callbacks.onPlay = [onGui]() { onGui([](MainWindow* w) { w->m_player->play(); }); };
+        callbacks.onPause = [onGui]() { onGui([](MainWindow* w) { w->m_player->pause(); }); };
+        callbacks.onTogglePlayPause = [onGui]() { onGui([](MainWindow* w) { w->m_player->togglePlayPause(); }); };
+        callbacks.onNextTrack = [onGui]() { onGui([](MainWindow* w) { w->playNextInFolder(); }); };
+        callbacks.onPreviousTrack = [onGui]() { onGui([](MainWindow* w) { w->playPreviousInFolder(); }); };
+        callbacks.onSeek = [onGui](double seconds) {
+            onGui([seconds](MainWindow* w) { w->m_player->seekAbsolute(seconds, true); });
         };
         m_platform->setupMediaKeyCommands(callbacks);
     }
