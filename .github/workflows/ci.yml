@@ -53,8 +53,10 @@ jobs:
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-qt6-base
             mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qt6-tools
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-cppwinrt
+            zip
       - name: Configure
         # The native (relocating) pkgconf: MSYS's own pkg-config returns /ucrt64/... paths
         # that a native CMake can't resolve.
@@ -65,3 +67,12 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Package
+        run: |
+          version=$(sed -n 's/^project(Kvikplay VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          scripts/package_windows_msys2.sh build "$version"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kvikplay-windows-x64
+          path: build/Kvikplay-*-Windows-x64.zip
+          if-no-files-found: error

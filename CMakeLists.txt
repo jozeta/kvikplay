@@ -364,6 +364,9 @@ add_executable(test_platform
 )
 target_include_directories(test_platform PRIVATE src)
 target_link_libraries(test_platform PRIVATE Qt6::Widgets)
+if(WIN32)
+    target_link_libraries(test_platform PRIVATE dwmapi shell32 windowsapp)
+endif()
 if(APPLE)
     target_link_libraries(test_platform PRIVATE
         ${COCOA_LIBRARY}
