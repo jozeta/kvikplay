@@ -1,241 +1,322 @@
 # Kvikplay
 
-> An extremely lightweight, fast, minimalistic cross-platform video player for macOS and Windows.
+> A fast, lightweight, frameless video and audio player for macOS and Windows.
 
-Kvikplay provides the core playback power of a traditional media player (powered by **libmpv**), built around a philosophy of Nordic minimalism, pure speed, and an unobtrusive desktop presence.
+**Version 1.0.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
-During normal playback, there is practically no interface chrome—no traditional toolbars, no title bar, no permanent playback controls, no window borders, and no playlists. The video occupies 100% of the frameless window, perfectly locked to its native display aspect ratio.
-
----
-
-## Key Features
-
-- **Frameless Nordic Minimalist Design**:
-  - Rounded corners (`14px` radius) with native OS drop shadow.
-  - Custom geometric Nordic squircle app icon bundled for both macOS (`.icns`) and Windows (`.ico`).
-  - No title bar, no window decorations, no standard buttons.
-  - Video fills the entire window surface without letterboxing, pillarboxing, or distortion.
-
-- **Strict Aspect-Ratio Locking & Monitor Safe Area Clamping**:
-  - Automatically constrains window geometry to preserve display aspect ratio (accounting for non-square pixel SAR and metadata).
-  - **Screen Boundary Clamping**: When opening a video, Kvikplay automatically clamps and centers the window within the visible work area of the active monitor (accounting for dock, menu bar, and taskbar insets), preventing the window or controls from ever spilling off-screen.
-  - Native 4-corner interactive resizing on both macOS (`NSWindow setAspectRatio:`, resizable borderless window) and Windows (`WM_SIZING` and `WM_NCHITTEST`).
-  - Shortcuts `1`, `2`, `4` to jump to 100% original video size, 50% half size, and 25% quarter size.
-
-- **libmpv High-Performance & HDR Rendering Pipeline**:
-  - Direct3D 11 hardware decoding on Windows (`d3d11va`) and `VideoToolbox` on macOS.
-  - Core Profile 3.3 zero-overhead rendering surface without depth/stencil buffers.
-  - High-precision HDR Tone-Mapping & Pass-Through (`target-colorspace-hint`, `hdr-compute-peak`, `tone-mapping=auto`).
-  - Audio pitch correction, low-latency seek hacks, and 128 MiB in-memory cache.
-  - Instant startup via 0.5s tuned demuxer probe durations and universal `sub-codepage=auto` subtitle decoding.
-
-- **Playback Intelligence & Navigation**:
-  - **Resume Playback Position**: Automatically remembers playback progress per file and resumes with an OSD notification.
-  - **Smart Folder Navigation & Auto-Play**: Natural alphanumeric folder traversal (`Episode 1` -> `Episode 2` -> `Episode 10`) via `]` / `PageDown` and `[` / `PageUp`. Dropping a folder automatically scans and launches playback seamlessly.
-  - **Auto-Advance on EOF**: Automatically loads and plays the next episode or file in the folder when current media ends.
-  - **Chapter Markers & Jumping**: Embedded chapters render as subtle tick marks on the timeline groove; jump between chapters using `Shift + ]` and `Shift + [`.
-  - **Hold-to-Speed (2.0x Boost)**: Hold `C` or hold the Fast-Forward button to temporarily boost playback to 2.0x with pitch correction, instantly restoring the previous custom speed on release.
-  - **Fine-Grained Speed Control**: Adjust playback speed in &plusmn;0.1x steps with `-` and `=` (0.25x – 4.0x), or press `Backspace` to reset to 1.0x.
-  - **Frame-by-Frame Stepping**: Step forward precisely 1 frame with `.` (period) or backward 1 frame with `,` (comma).
-  - **External Subtitles**: Automatic fuzzy discovery for subtitles in the same directory, plus instant drag-and-drop support for `.srt`, `.vtt`, `.ass`, `.sub`, `.idx`.
-  - **Subtitle Timing Sync**: Adjust subtitle delay on the fly using `Z` (-100ms) and `X` (+100ms).
-
-- **Picture-in-Picture (PiP) Snap**:
-  - Shortcut `P` instantly docks and scales the window into an always-on-top mini player snapped to the bottom-right corner.
-
-- **Stream & Codec Inspector**:
-  - Shortcut `I` toggles a high-tech translucent HUD displaying video codec, resolution, display FPS, bitrate, hardware decoder, dropped frames, and audio layout (optimized with cached static metadata to minimize synchronous IPC).
-
-- **Built-in Help & Shortcuts Guide**:
-  - Access "Help & Shortcuts..." from the right-click menu anytime to open an in-app visual guide and reference modal.
-
-- **macOS Now Playing & System Media Keys Integration**:
-  - Seamless native macOS Control Center, Menu Bar, and Lock Screen integration via `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`.
-  - Displays media title, duration, elapsed position, and playback rate in system media widgets.
-  - Hardware keyboard media keys and headphone/touchpad controls (Play, Pause, Next Track, Previous Track, Scrubbing) work globally even when Kvikplay is running in the background.
-
-- **Sleep & Screen-Saver Inhibit (Caffeine Mode)**:
-  - Automatically inhibits system sleep and screensaver display dimming while media is actively playing using native OS power assertions (`IOPMAssertionCreateWithName` on macOS, `SetThreadExecutionState` on Windows).
-  - Automatically releases power assertions as soon as playback pauses, media ends, or the window closes.
-
-- **Audio Enhancements**:
-  - **Quiet Dialogue Boost / Dynaudnorm**: Toggle dynamic audio normalization (`N` key or context menu) to boost quiet speech and soften loud explosions without clipping.
-
-- **Instant Clean Frame Capture**:
-  - Shortcut `S` captures a pixel-perfect, clean video frame directly to Desktop and copies it to the system clipboard.
-  - Shortcut `Shift+S` captures the frame with rendered subtitles included.
-
-- **Interactive Timeline Hover Thumbnail Preview**:
-  - Hovering or dragging over the timeline displays a floating rounded preview card with real-time timestamp and decoded video keyframe thumbnail, rendered with strict source aspect-ratio preservation.
-
-- **Recent Files**:
-  - Context menu submenu with recent files list (up to 8 items, deduplicated) and clear action.
-
-- **Native Open File Support**:
-  - Open files instantly with `Cmd + O` (macOS) / `Ctrl + O` (Windows) or through the right-click context menu.
-
-- **Fluid Mouse & Trackpad Interactions**:
-  - **Right Click / Trackpad Two-Finger Click**: Quick tap/click toggles Play / Pause anywhere on the video (when window is focused).
-  - **Right Click / Trackpad Two-Finger Hold (> 0.5s)**: Holding for longer than 0.5s opens the minimalist context menu.
-  - **Click on Unfocused Window**: Brings the window into focus without accidentally pausing/playing.
-  - **Left Click and Drag**: Moves the frameless window smoothly across desktops.
-  - **Double Left Click**: Toggles between fullscreen and windowed mode, remembering the windowed dimensions.
-  - **Trackpad Two-Finger Scrubbing**: Drag right to scrub forward, drag left to scrub backward (option in context menu to reverse direction).
-  - **Generous Resize Zones**: 32px corner zones and 16px border zones make resizing effortless.
-  - **Mouse Wheel**: Seek forwards/backwards 10s.
-  - **Shift + Mouse Wheel**: Seek forwards/backwards 30s.
-  - **Ctrl + Mouse Wheel**: Volume adjustment in 5% increments.
-  - **Context Menu**: Minimalist context menu with track selectors, reverse trackpad scrubbing, Always on Top, Fullscreen, and Settings.
-  - **Hover & Inactivity**: Displays the OSD as soon as the mouse hovers over the window; hides OSD after 5s of mouse inactivity and restores it instantly on movement (zero CPU animation churn).
-
-- **Transparent Frosted OSD**:
-  - Highly transparent, frosted glass styling with zero black background.
-  - Filename displayed in the top-left corner in clean, small typography.
-  - Interactive timeline seek bar with draggable handle marker.
-  - Time display: `Current Time / Total Time` (e.g. `01:23 / 03:45`).
-  - Clickable Time: Click the time label to toggle between elapsed time and remaining time (e.g. `-02:22 / 03:45`).
-  - Semi-transparent circular controls (Seek -10s, Play/Pause, Seek +10s, Close).
-  - Vertical volume slider with mute/unmute toggle.
-  - Visual OSD feedback badge (`+10s`, `-10s`, `Volume 75%`, `Size: 100%`).
-
-- **Fullscreen Mode**:
-  - Full display occupancy with auto-hiding cursor after 2.5s inactivity.
-  - Aspect ratio preserved on pure black background.
-  - `Escape` or `F` exits fullscreen.
-
-- **Centralized Format Registry & Associations**:
-  - Single source of truth for all formats across GUI, file validation, and OS registration.
-  - Categorized file associations dialog (Common Video, Other Video, Audio).
-  - Native macOS UTI / Launch Services & Windows Registry integration.
-
-- **JSON Configuration Persistence**:
-  - Persists window geometry, volume, always-on-top, and format associations in standard OS app config directory.
+Kvikplay is for people who want a video to open instantly and then get out of the way. There is no
+title bar, toolbar or playlist: the video fills a rounded, borderless window that keeps the video's
+exact aspect ratio, and the controls only appear while you move the mouse. Playback is done by
+[libmpv](https://mpv.io) (the engine behind mpv), so it plays practically anything, with hardware
+decoding and HDR tone mapping. The interface is Qt 6.
 
 ---
 
-## Keyboard Shortcuts
+## Contents
+
+- [Screenshots](#screenshots)
+- [What's new](#whats-new)
+- [Features](#features)
+- [macOS and Windows](#macos-and-windows)
+- [Installation](#installation)
+- [How to](#how-to)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Mouse and trackpad](#mouse-and-trackpad)
+- [Settings](#settings)
+- [Supported formats](#supported-formats)
+- [Building from source](#building-from-source)
+- [Technology](#technology)
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/screenshots/playback.jpg" alt="Kvikplay playing a video with the overlay visible"><br><sub>Playback with the overlay: file name, timeline, time, controls and volume</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/menu.jpg" alt="The right-click menu over a playing video"><br><sub>Right-click-and-hold menu with tracks, options and recent files</sub></td>
+    <td align="center" width="33%"><img src="docs/screenshots/inspector.jpg" alt="The media inspector showing codec and stream details"><br><sub>Media inspector (<code>I</code>): codecs, resolution, bitrates, hardware decoder</sub></td>
+  </tr>
+</table>
+
+<sub>Video: <em>Big Buck Bunny</em> © Blender Foundation, CC BY 3.0.</sub>
+
+---
+
+## What's new
+
+### 1.0.0 (2026-11-19)
+
+The first complete version: frameless aspect-locked window, libmpv playback with hardware decoding
+and HDR, transparent overlay with hover thumbnails and chapter ticks, resume position, folder
+navigation and auto-advance, hold-to-speed, frame stepping, subtitle sync, dialogue boost,
+screenshots, picture-in-picture, media inspector, recent files, file associations, macOS Now
+Playing and media keys, sleep inhibit, and standalone packaging.
+
+Older and upcoming changes: [CHANGELOG.md](CHANGELOG.md).
+
+---
+
+## Features
+
+**Window**
+- Frameless window with rounded corners and a system shadow. It locks to the video's display
+  aspect ratio, including anamorphic (non-square pixel) video.
+- A newly opened video sizes the window to its native size, shrunk to fit at most 85 % of the
+  screen. The window always stays inside the visible screen area (menu bar, Dock and taskbar
+  excluded).
+- Drag anywhere to move. Resize from any edge (16 px zone) or corner (32 px zone).
+- Fullscreen (double-click or `F`) keeps the aspect ratio on black and hides the cursor after
+  5 seconds without movement.
+- Picture-in-picture (`P`): a 380 px wide always-on-top mini player in the bottom-right corner.
+- Window scale shortcuts: `1` = 100 %, `2` = 50 %, `4` = 25 % of the video's size.
+
+**Playback**
+- Starts playing as soon as a file opens, and resumes where you left off (remembered for the last
+  100 files, when you stopped more than 5 s from the start and the end).
+- Plays the next file in the folder when one ends. `]`/`[` and PageDown/PageUp move through the
+  folder in natural order (`Episode 2` before `Episode 10`).
+- Hold `C` (or hold the ⏩ button) for 2× speed; release to go back. Speed steps of ±0.1× from
+  0.25× to 4×, with pitch correction.
+- Frame stepping, ±10 s / ±30 s seeking, chapter jumps with chapter ticks on the timeline.
+- Audio, video and subtitle track selection. Subtitles next to the video are found automatically;
+  drop a subtitle file on the window to add it. Subtitle delay in 100 ms steps.
+- Dialogue boost: dynamic audio normalisation (`dynaudnorm`) that lifts quiet speech.
+
+**Overlay**
+- Appears on mouse movement, fades out after 5 seconds. Shows the file name, a timeline with a
+  thumbnail preview on hover, elapsed or remaining time (click the time to switch), play/pause,
+  ±10 s and close buttons, and a volume slider.
+- Short on-screen messages for every action (`+10s`, `Volume 75%`, `Speed 1.5x`, …).
+- Media inspector (`I`): container, codecs, resolution, frame rate, bitrates, hardware decoder,
+  dropped frames, audio channels and sample rate, updated twice a second.
+
+**Other**
+- Screenshot (`S`, or `Shift+S` with subtitles) saved to the Desktop as `Kvikplay_<date>_<time>.png`
+  and copied to the clipboard.
+- Recent files (last 8) in the right-click menu.
+- File associations dialog for every supported format.
+- Keeps the display awake while playing.
+
+---
+
+## macOS and Windows
+
+Kvikplay aims for the same features on both systems, adapted to each OS. Current state:
+
+| Feature | macOS | Windows |
+|---|---|---|
+| Frameless rounded window, shadow | ✅ Cocoa layer, 14 px radius | ✅ DWM rounding (Windows 11; square on Windows 10) |
+| Aspect-locked resizing | ✅ `NSWindow setAspectRatio` | ✅ `WM_SIZING` |
+| Hardware decoding | ✅ VideoToolbox | ⚠️ `d3d11va` requested; may fall back to software with the OpenGL renderer, under review |
+| Open a file from Finder / Explorer while running | ✅ Opens in the running window | ⚠️ Starts a second copy of the app |
+| Now Playing and media keys | ✅ Control Center, lock screen, media keys | ❌ Not yet (planned: System Media Transport Controls) |
+| Keep display awake while playing | ✅ IOKit power assertion | ✅ `SetThreadExecutionState` |
+| File associations | ✅ Launch Services | ✅ Per-user registry + Windows "Default apps" |
+| Open-file shortcut | `Cmd+O` | `Ctrl+O` |
+
+The Windows build has not been verified on Windows during the latest review; see the open items in
+the review notes before relying on it.
+
+---
+
+## Installation
+
+### macOS (11 Big Sur or later)
+
+1. Build the app (see [Building from source](#building-from-source)). The build produces a
+   self-contained `build/kvikplay.app`, with Qt, libmpv and FFmpeg bundled inside.
+2. Drag `kvikplay.app` into `/Applications`.
+3. The app is signed ad hoc only, so the first time you open it, right-click it → **Open**, then
+   confirm.
+
+### Windows (10 or 11, 64-bit)
+
+1. Build with Visual Studio 2022 (see below). The build copies Qt, `mpv-2.dll` and the C++ runtime
+   next to `kvikplay.exe` in `build\`.
+2. Copy that whole folder wherever you like (for example `C:\Program Files\Kvikplay`) and pin
+   `kvikplay.exe` to Start.
+
+Kvikplay needs no installer and writes nothing outside its config file, unless you set up file
+associations.
+
+---
+
+## How to
+
+**Open a video.** Drag a file or a folder onto the window, press `Cmd+O` / `Ctrl+O`, right-click and
+hold → **Open File…**, or open the file with Kvikplay from Finder/Explorer. A dropped folder starts
+with its first media file.
+
+**Play and pause.** `Space`, a quick right-click (or two-finger click), or the play button. When
+the window isn't focused, the first click only focuses it.
+
+**Open the menu.** Right-click and hold for half a second (or two-finger click and hold).
+
+**Seek.** Arrow keys (±10 s, with `Shift` ±30 s), scroll wheel, two-finger swipe left/right, or click
+and drag on the timeline. Hover the timeline to see a thumbnail.
+
+**Watch a series.** Open the first episode; the next one starts when it ends. Use `]` and `[` to
+skip.
+
+**Fix subtitle timing.** Press `Z` if subtitles come too late, `X` if they come too early (100 ms per
+press).
+
+**Add a subtitle file.** Drag the `.srt`, `.ass`, `.vtt`, `.ssa`, `.sub` or `.idx` file onto the
+window.
+
+**Make Kvikplay the default player.** Right-click and hold → **File Associations…**, tick the
+formats, **Save**. On Windows, also confirm in **Settings → Apps → Default apps** (the dialog has a
+button for it).
+
+**Take a screenshot.** `S` for the clean frame, `Shift+S` with subtitles. The image goes to the
+Desktop and the clipboard.
+
+---
+
+## Keyboard shortcuts
 
 | Shortcut | Action |
 |---|---|
-| `Cmd + O` / `Ctrl + O` | Open File via native file picker |
-| `Space` | Play / Pause |
-| `C` (Hold) | 2.0x Quick Speed Boost (release restores previous custom speed) |
-| `-` / `=` (or `+`) | Adjust playback speed &plusmn;0.1x (range 0.25x – 4.0x) |
-| `Backspace` | Reset playback speed to 1.0x |
-| `.` (Period) | Step forward 1 frame |
-| `,` (Comma) | Step backward 1 frame |
-| `1` | Original size (100% video resolution) |
-| `2` | Half size (50% video resolution) |
-| `4` | Quarter size (25% video resolution) |
-| `Left Arrow` | Seek backward 10 seconds |
-| `Right Arrow` | Seek forward 10 seconds |
-| `Shift + Left` | Seek backward 30 seconds |
-| `Shift + Right` | Seek forward 30 seconds |
-| `Up Arrow` | Increase volume (+5%) |
-| `Down Arrow` | Decrease volume (-5%) |
-| `]` / `PageDown` | Play next media file in folder |
-| `[` / `PageUp` | Play previous media file in folder |
-| `Shift + ]` | Next chapter |
-| `Shift + [` | Previous chapter |
-| `Z` | Subtitle delay -100ms |
-| `X` | Subtitle delay +100ms |
-| `P` | Toggle Picture-in-Picture mode |
-| `I` | Toggle Stream & Codec Inspector HUD |
-| `S` | Instant clean screenshot (copied to clipboard & saved to Desktop) |
-| `Shift + S` | Screenshot with subtitles (copied to clipboard & saved to Desktop) |
-| `N` | Toggle Quiet Dialogue Boost (dynaudnorm) |
-| `M` | Toggle mute / unmute |
-| `F` | Toggle fullscreen |
-| `Escape` | Exit fullscreen |
-| `Q` | Quit application |
+| `Cmd+O` / `Ctrl+O` | Open a file |
+| `Space` | Play / pause |
+| `←` / `→` | Seek −10 s / +10 s |
+| `Shift+←` / `Shift+→` | Seek −30 s / +30 s |
+| `↑` / `↓` | Volume +5 % / −5 % |
+| `M` | Mute / unmute |
+| `C` (hold) | 2× speed while held |
+| `-` / `=` (or `+`) | Speed −0.1× / +0.1× (0.25×–4×) |
+| `Backspace` | Speed back to 1× |
+| `.` / `,` | One frame forward / back |
+| `]` or `PageDown` | Next file in folder |
+| `[` or `PageUp` | Previous file in folder |
+| `Shift+]` / `Shift+[` | Next / previous chapter |
+| `Z` / `X` | Subtitle delay −100 ms / +100 ms |
+| `N` | Dialogue boost on/off |
+| `S` / `Shift+S` | Screenshot / screenshot with subtitles |
+| `1` / `2` / `4` | Window at 100 % / 50 % / 25 % of video size |
+| `P` | Picture-in-picture on/off |
+| `I` | Media inspector on/off |
+| `F` | Fullscreen on/off |
+| `Esc` | Leave fullscreen |
+| `Q` | Quit |
 
----
+The same list is in the app: right-click and hold → **Help & Shortcuts…**.
 
-## Mouse & Trackpad Interactions
+## Mouse and trackpad
 
 | Action | Result |
 |---|---|
-| `Right Click / Trackpad Two-Finger Click` | Toggle Play / Pause (when focused) |
-| `Right Click / Two-Finger Hold (> 0.5s)` | Open Context Menu |
-| `Double Left Click` | Toggle Fullscreen / Windowed (restores windowed size) |
-| `Left Click + Drag` | Move frameless window |
-| `Drag 4 Corners / Edges` | Resize window (32px corner zones, 16px edge zones) |
-| `Two-Finger Trackpad Scrub` | Drag right/left to seek forward/backward (reversable) |
-| `Scroll Up / Down` | Seek forward / backward 10s |
-| `Shift + Scroll Up / Down` | Seek forward / backward 30s |
-| `Ctrl + Scroll Up / Down` | Increase / decrease volume by 5% |
-| `Hover Window` | Reveal overlay controls (auto-hides after 5s stillness) |
-| `Drag and Drop File or Folder` | Open video, audio, or entire media directory and start playback immediately |
+| Right-click / two-finger click | Play / pause (window must already be focused) |
+| Right-click / two-finger click, held 0.5 s | Menu |
+| Double-click | Fullscreen on/off |
+| Drag | Move the window |
+| Drag an edge or corner | Resize, keeping the aspect ratio |
+| Scroll wheel | Seek ±10 s (`Shift` ±30 s) |
+| `Ctrl` + scroll wheel | Volume ±5 % |
+| Two-finger swipe left/right | Seek ±10 s (`Shift` ±30 s); direction can be reversed in the menu |
+| Hover the timeline | Thumbnail preview |
+| Click the time | Switch between elapsed and remaining time |
+| Hold the ⏩ button | 2× speed while held |
 
 ---
 
-## Technology Stack
+## Settings
 
-- **Language**: C++20
-- **GUI Framework**: Qt 6 Widgets (`QtCore`, `QtGui`, `QtWidgets`, `QtOpenGLWidgets`, `QtSvg`)
-- **Playback Engine**: `libmpv` (0.35+ / 0.42+)
-- **Video Renderer**: `libmpv` Render API (`MPV_RENDER_API_TYPE_OPENGL`) rendering into Qt's `QOpenGLWidget` FBO
-- **Build System**: CMake (3.25+)
-- **Platform Integrations**:
-  - macOS: Objective-C++ / Cocoa (`NSWindow`, AppKit, Launch Services, UTTypes, `MPNowPlayingInfoCenter`, `MPRemoteCommandCenter`, `IOPMAssertion`)
-  - Windows: Win32 API (`WM_SIZING`, `WM_NCHITTEST`, DWM, Registry, `SetThreadExecutionState`)
+Settings are changed in the app (menu toggles, volume, window size) and saved to a JSON file:
+
+| OS | File |
+|---|---|
+| macOS | `~/Library/Preferences/Kvikplay/Kvikplay/config.json` |
+| Windows | `%LOCALAPPDATA%\Kvikplay\Kvikplay\config.json` |
+
+| Key | Default | Set by | Meaning |
+|---|---|---|---|
+| `windowWidth`, `windowHeight` | `960`, `540` | Resizing | Last window size (minimum 160 × 90) |
+| `windowX`, `windowY` | `-1`, `-1` (centred) | Moving | Last window position |
+| `volume` | `100` | Volume slider, `↑`/`↓` | 0–100 |
+| `muted` | `false` | `M`, volume icon | Mute state |
+| `alwaysOnTop` | `false` | Menu → Always on Top | Keep the window above others |
+| `reverseTrackpadScrubbing` | `false` | Menu → Reverse Trackpad Scrubbing | Swap the swipe-to-seek direction |
+| `dialogueBoost` | `false` | Menu → Quiet Dialogue Boost, `N` | Dynamic audio normalisation |
+| `playbackSpeed` | `1.0` | (not yet saved by the app) | Speed applied at start, 0.25–4.0 |
+| `startInFullscreen` | `false` | (not used yet) | Reserved |
+| `recentFiles` | `[]` | Opening files; Menu → Open Recent → Clear Recent | Last 8 files |
+| `resumePositions` | `{}` | Closing or switching files | Path → seconds, up to 100 files |
+| `associations` | `[]` | File Associations dialog | Extensions you chose to associate |
+
+Quit Kvikplay before editing the file by hand; invalid values fall back to the defaults. Delete the
+file to reset everything.
+
+Fixed behaviour (not configurable): overlay hides after 5 s; seek steps 10 s / 30 s; volume steps
+5 %; demuxer cache 128 MiB / 15 s read-ahead; screenshots go to the Desktop.
 
 ---
 
-## Building and Running
+## Supported formats
 
-### Prerequisites
+Defined in one place, `src/formats/FormatRegistry.cpp`:
 
-#### macOS
-Install dependencies via Homebrew:
+- **Common video:** `.mp4` `.m4v` `.mkv` `.avi` `.mov` `.webm`
+- **Other video:** `.ogv` `.3gp` `.3g2` `.mts` `.m2ts` `.ts` `.m2v` `.vob` `.mpg` `.mpeg` `.wmv` `.asf` `.flv`
+- **Audio:** `.mp3` `.wav` `.flac` `.aac` `.m4a` `.ogg` `.opus` `.wma`
+- **Subtitles (drop onto the window):** `.srt` `.ass` `.ssa` `.vtt` `.sub` `.idx`
+
+---
+
+## Building from source
+
+### Requirements
+
+**macOS**
 ```bash
 brew install cmake pkg-config mpv qtbase qtsvg
 ```
 
-#### Windows
-- Visual Studio 2022 (MSVC with C++20 support)
-- Qt 6.5+ (MSVC 2022 64-bit)
-- libmpv development build (DLL and headers)
+**Windows**
+- Visual Studio 2022 (MSVC, C++20)
+- Qt 6.5 or later for MSVC 2022 64-bit
+- A libmpv development package (`mpv-2.dll`, import library and headers) found through `pkg-config`
 
-### Compilation & Automatic Standalone Deployment
-
-Kvikplay is configured to **always build as a 100% self-contained standalone application** automatically whenever you build the target. Zero manual post-packaging commands are needed.
+### Build
 
 ```bash
-# Configure
 cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-# Build (automatically bundles all Qt, MPV, and codec dependencies post-build)
 cmake --build build -j8
-
-# Run Unit Tests
-ctest --test-dir build --output-on-failure
 ```
 
-- **macOS**: Every standard build automatically invokes `macdeployqt`, bundles all 50+ media frameworks (`libmpv`, `ffmpeg`, codecs, Qt), rewrites all dynamic library IDs to relative `@executable_path/../Frameworks`, normalizes rpaths, and applies ad-hoc code signing. The resulting `build/kvikplay.app` can be copied to any Mac and run immediately without Homebrew or external libraries.
-- **Windows**: Every standard build automatically invokes `windeployqt` and packages `mpv-2.dll`, Qt libraries, plugins, and the C++ runtime directly into the output directory with `kvikplay.exe`.
-- Standalone packaging is enabled by default (`KVIKPLAY_STANDALONE=ON`). To disable it for rapid incremental debugging, configure with `-DKVIKPLAY_STANDALONE=OFF`.
+Every build also packages a standalone app: on macOS `macdeployqt` bundles Qt, libmpv and FFmpeg
+into `build/kvikplay.app` and signs it ad hoc; on Windows `windeployqt` and the script in `scripts/`
+copy Qt, `mpv-2.dll` and the runtime next to `kvikplay.exe`. Turn this off for quicker development
+builds with `-DKVIKPLAY_STANDALONE=OFF`.
 
-### Running
+### Tests
+
+The tests use `assert()`, which Release builds compile out, so run them from a Debug build:
 
 ```bash
-# macOS
-open build/kvikplay.app
-# Or directly from terminal:
-./build/kvikplay.app/Contents/MacOS/kvikplay [optional_media_file]
+cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug -DKVIKPLAY_STANDALONE=OFF
+cmake --build build-debug -j8
+ctest --test-dir build-debug --output-on-failure
+```
 
-# Windows
-.\build\kvikplay.exe [optional_media_file]
+`test_playback` needs the sample files in `test_media/`, which are not in the repository yet.
 
-# Or drag and drop any supported media file or directory directly into the player window.
+### Run
+
+```bash
+open build/kvikplay.app                                   # macOS
+./build/kvikplay.app/Contents/MacOS/kvikplay movie.mkv    # macOS, with a file
+.\build\kvikplay.exe movie.mkv                            # Windows
 ```
 
 ---
 
-## Supported File Formats
+## Technology
 
-Defined centrally in `src/formats/FormatRegistry.cpp`:
-
-- **Common Video**: `.mp4`, `.m4v`, `.mkv`, `.avi`, `.mov`, `.webm`
-- **Other Video**: `.ogv`, `.3gp`, `.3g2`, `.mts`, `.m2ts`, `.ts`, `.m2v`, `.vob`, `.mpg`, `.mpeg`, `.wmv`, `.asf`, `.flv`
-- **Audio**: `.mp3`, `.wav`, `.flac`, `.aac`, `.m4a`, `.ogg`, `.opus`, `.wma`
+- **C++20**, **Qt 6** Widgets (Core, Gui, Widgets, OpenGLWidgets, Svg), **CMake** 3.25+
+- **libmpv** 0.35 or later (developed against 0.42), rendered through the mpv OpenGL render API
+  into a `QOpenGLWidget`
+- **macOS:** Objective-C++ with Cocoa, Launch Services, UniformTypeIdentifiers, MediaPlayer
+  (`MPNowPlayingInfoCenter`, `MPRemoteCommandCenter`) and IOKit power assertions
+- **Windows:** Win32 (`WM_NCHITTEST`, `WM_SIZING`), DWM, the registry and `SetThreadExecutionState`

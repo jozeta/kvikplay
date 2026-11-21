@@ -1,0 +1,7 @@
+design=own
+design_decided=2026-11-21
+baseline=2026-11
+waive=DES-FAMILY-1: not part of the Låda Glass family by decision; Kvikplay keeps its own minimal frameless look to stay small and fast
+waive=DES-RESP-1: native desktop app (Qt), not a web app
+waive=DES-PWA-1: native desktop app (Qt), not a web app
+waive=DES-THEME-1: video player with a dark-only overlay on top of video; a light theme does not apply
