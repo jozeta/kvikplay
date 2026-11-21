@@ -2,7 +2,7 @@
 
 > A fast, lightweight, frameless video and audio player for macOS and Windows.
 
-**Version 1.0.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
+**Version 1.1.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
 
 Kvikplay is for people who want a video to open instantly and then get out of the way. There is no
 title bar, toolbar or playlist: the video fills a rounded, borderless window that keeps the video's
@@ -45,13 +45,19 @@ decoding and HDR tone mapping. The interface is Qt 6.
 
 ## What's new
 
-### 1.0.0 (2026-11-19)
+### 1.1.0 (2026-11-21)
 
-The first complete version: frameless aspect-locked window, libmpv playback with hardware decoding
-and HDR, transparent overlay with hover thumbnails and chapter ticks, resume position, folder
-navigation and auto-advance, hold-to-speed, frame stepping, subtitle sync, dialogue boost,
-screenshots, picture-in-picture, media inspector, recent files, file associations, macOS Now
-Playing and media keys, sleep inhibit, and standalone packaging.
+- **Automatic updates:** Kvikplay looks for a new version when it starts and offers to install
+  it. Turn it off in About.
+- **Redesigned right-click menu**, grouped by task, with speed, chapters, next/previous file,
+  window size and subtitle timing.
+- **Opening from Finder/Explorer:** replace the current video or open a new window.
+- **Windows parity:** media keys and the media flyout, one player window, HiDPI-correct resizing.
+- **Fixes:** no more black window at launch, real timeline thumbnails, replay after the end,
+  reliable screenshots, multi-monitor restore, and many more.
+- **Security and speed:** media metadata shown as plain text only, hardened libmpv, fewer threads
+  and less memory.
+- **Signed and notarized** macOS release.
 
 Older and upcoming changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -263,6 +269,7 @@ Settings are changed in the app (menu toggles, volume, window size) and saved to
 | `dialogueBoost` | `false` | Menu → Quiet Dialogue Boost, `N` | Dynamic audio normalisation |
 | `playbackSpeed` | `1.0` | `-`, `=`, `Backspace` | Speed applied at start, 0.25–4.0 (the 2× hold is not saved) |
 | `startInFullscreen` | `false` | Menu → Start in Fullscreen | Go fullscreen when the app starts |
+| `checkForUpdates` | `true` | About → Check for updates when Kvikplay starts | Look for a new version at start |
 | `externalOpen` | `"replace"` | Menu → Opening Files from Finder/Explorer | `"replace"` or `"newWindow"`: what opening a file from Finder/Explorer does while a video plays |
 | `recentFiles` | `[]` | Opening files; Menu → Open Recent → Clear Recent | Last 8 files |
 | `resumePositions` | `[]` | Closing or switching files | `{path, pos}` list, the 100 most recently saved files |
@@ -280,6 +287,25 @@ Fixed behaviour (not configurable): overlay hides after 5 s; seek steps 10 s / 3
 5 %; demuxer cache 128 MiB / 15 s read-ahead; screenshots go to the Desktop.
 
 ---
+
+## Updates
+
+When Kvikplay starts (3 seconds after the window opens, in the background) it asks GitHub for the
+latest release of `jozeta/kvikplay`. If there is a newer version you are asked whether to install
+it:
+
+- **Install Update** downloads it, checks it, quits Kvikplay, puts the new version in place of the
+  old one and starts it again.
+- **Not Now** does nothing until the next start.
+
+Before anything is installed the download must match the SHA-256 checksum GitHub publishes for it,
+and on macOS the new app must be signed by the same developer and approved by Gatekeeper. If the
+app's folder isn't writable, or there is no automatic update for your computer yet (for example
+Windows, until a Windows build is published), the download page opens instead.
+
+Turn the check off, or check right now: right-click and hold → **About Kvikplay** → **Check for
+updates when Kvikplay starts** / **Check for Updates…**. The check sends one request to
+`api.github.com` with the user agent `Kvikplay/<version>`; nothing else about you or your files.
 
 ## Supported formats
 
@@ -351,6 +377,14 @@ open build/kvikplay.app                                   # macOS
 ```
 
 ---
+
+## License
+
+Kvikplay's source code is released under the [MIT License](LICENSE). The macOS app bundles Qt,
+libmpv, FFmpeg and other libraries; some of them are GPL licensed, so the distributed app as a
+whole is covered by the GNU GPL version 3. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists
+every bundled library with its licence and source, and the licence texts are inside the app
+(`Contents/Resources/licenses/`).
 
 ## Technology
 

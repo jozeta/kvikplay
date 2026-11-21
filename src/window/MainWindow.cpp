@@ -22,6 +22,8 @@
 #include <QStandardPaths>
 #include <QProcess>
 #include <QPointer>
+#include <QCheckBox>
+#include <QPushButton>
 #include <algorithm>
 #include <utility>
 #include <cmath>
@@ -46,7 +48,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_osdTimer(new QTimer(this))
     , m_scrollResetTimer(new QTimer(this))
     , m_rightClickHoldTimer(new QTimer(this))
-    , m_inspectorTimer(new QTimer(this)) {
+    , m_inspectorTimer(new QTimer(this))
+    , m_updates(new UpdateManager(this, this)) {
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -229,6 +232,7 @@ MainWindow::~MainWindow() {
 }
 
 bool MainWindow::initialize(bool cascade) {
+    m_isExtraWindow = cascade;
     if (!m_player->initialize()) {
         return false;
     }
@@ -313,6 +317,11 @@ bool MainWindow::initialize(bool cascade) {
 void MainWindow::applyStartupState() {
     if (SettingsManager::instance().startInFullscreen() && !m_isFullscreen) {
         toggleFullscreen();
+    }
+    // Look for a newer version shortly after start, in the background, so it never
+    // delays opening the video. Extra windows don't ask again.
+    if (SettingsManager::instance().checkForUpdates() && !m_isExtraWindow) {
+        QTimer::singleShot(3000, this, [this]() { m_updates->checkForUpdates(false); });
     }
 }
 
@@ -1351,6 +1360,7 @@ void MainWindow::showAboutDialog() {
     aboutBox.setStyleSheet(QStringLiteral(
         "QMessageBox { background-color: #1a1c22; color: #eeeeee; }"
         "QLabel { color: #dddddd; font-size: 13px; }"
+        "QCheckBox { color: #dddddd; font-size: 12px; }"
         "QPushButton { background-color: #272b35; color: #ffffff; border: 1px solid #3d4352; border-radius: 6px; padding: 6px 16px; }"
     ));
     aboutBox.setTextFormat(Qt::RichText); // static text only, no media data
@@ -1361,7 +1371,20 @@ void MainWindow::showAboutDialog() {
         "<p>Engine: <b>libmpv</b> &bull; UI: <b>Qt 6</b></p>"
     ));
     aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/app_icon.svg")).pixmap(48, 48));
+
+    auto* autoCheck = new QCheckBox(QStringLiteral("Check for updates when Kvikplay starts"), &aboutBox);
+    autoCheck->setChecked(SettingsManager::instance().checkForUpdates());
+    connect(autoCheck, &QCheckBox::toggled, this, [](bool on) {
+        SettingsManager::instance().setCheckForUpdates(on);
+        SettingsManager::instance().save();
+    });
+    aboutBox.setCheckBox(autoCheck);
+    QPushButton* checkNow = aboutBox.addButton(QStringLiteral("Check for Updates…"), QMessageBox::ActionRole);
+    aboutBox.addButton(QMessageBox::Close);
     aboutBox.exec();
+    if (aboutBox.clickedButton() == checkNow) {
+        m_updates->checkForUpdates(true);
+    }
 }
 
 #ifdef _WIN32

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(Kvikplay VERSION 1.0.0 LANGUAGES C CXX)
+project(Kvikplay VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,7 +36,7 @@ if(APPLE)
     set(ENV{PKG_CONFIG_PATH} "/opt/homebrew/lib/pkgconfig:/opt/homebrew/share/pkgconfig:/opt/homebrew/opt/libarchive/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Svg Test)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets OpenGLWidgets Svg Network Test)
 qt_standard_project_setup()
 
 find_package(PkgConfig REQUIRED)
@@ -86,6 +86,10 @@ set(KVIKPLAY_SOURCES
     src/platform/PlatformIntegration.cpp
     src/platform/SingleInstance.h
     src/platform/SingleInstance.cpp
+    src/update/UpdateLogic.h
+    src/update/UpdateLogic.cpp
+    src/update/UpdateManager.h
+    src/update/UpdateManager.cpp
     resources/resources.qrc
 )
 
@@ -131,6 +135,7 @@ target_link_libraries(kvikplay PRIVATE
     Qt6::Widgets
     Qt6::OpenGLWidgets
     Qt6::Svg
+    Qt6::Network   # update check (api.github.com) and download
     PkgConfig::MPV
 )
 
@@ -306,6 +311,15 @@ target_include_directories(test_context_menu PRIVATE src)
 target_link_libraries(test_context_menu PRIVATE Qt6::Widgets Qt6::Test)
 add_test(NAME test_context_menu COMMAND test_context_menu)
 
+add_executable(test_update
+    tests/TestUpdate.cpp
+    src/update/UpdateLogic.h
+    src/update/UpdateLogic.cpp
+)
+target_include_directories(test_update PRIVATE src)
+target_link_libraries(test_update PRIVATE Qt6::Core)
+add_test(NAME test_update COMMAND test_update)
+
 add_executable(test_platform
     tests/TestPlatform.cpp
     src/platform/PlatformIntegration.h
@@ -330,7 +344,7 @@ add_test(NAME test_version_consistency
 
 # Run every test from the source tree (so test_media/ is found from any build
 # folder) and point the settings at a throwaway folder instead of the user's.
-set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_thumbnails test_folder_index test_context_menu test_platform)
+set(KVIKPLAY_TESTS test_format_registry test_aspect_ratio test_settings test_playback test_thumbnails test_folder_index test_context_menu test_update test_platform)
 set_tests_properties(${KVIKPLAY_TESTS} PROPERTIES
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     ENVIRONMENT "KVIKPLAY_CONFIG_DIR=${CMAKE_CURRENT_BINARY_DIR}/test-config"

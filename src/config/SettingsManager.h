@@ -64,6 +64,10 @@ public:
     bool externalOpenInNewWindow() const { return m_externalOpenInNewWindow; }
     void setExternalOpenInNewWindow(bool newWindow) { m_externalOpenInNewWindow = newWindow; }
 
+    // Check GitHub for a newer version when the app starts (toggle in the About box).
+    bool checkForUpdates() const { return m_checkForUpdates; }
+    void setCheckForUpdates(bool check) { m_checkForUpdates = check; }
+
     QStringList associatedExtensions() const { return m_associatedExtensions; }
     void setAssociatedExtensions(const QStringList& extensions);
 
@@ -90,6 +94,7 @@ private:
     bool m_reverseTrackpadScrubbing{false};
     bool m_dialogueBoost{false};
     bool m_externalOpenInNewWindow{false};
+    bool m_checkForUpdates{true};
     QStringList m_recentFiles;
     // Oldest first; capped at kMaxResumePositions (least recently saved is dropped).
     std::vector<std::pair<QString, double>> m_resumePositions;

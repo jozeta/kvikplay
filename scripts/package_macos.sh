@@ -56,6 +56,12 @@ while IFS= read -r -d '' f; do
     fi
 done < <(find "$APP_PATH" -type f -print0)
 
+# Licences: list every bundled third-party library and ship its licence texts (GPL
+# components such as FFmpeg require this). Also keep Kvikplay's own LICENSE in the app.
+SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+python3 "$SRC_DIR/scripts/third_party_licenses.py" "$APP_PATH"
+cp "$SRC_DIR/LICENSE" "$APP_PATH/Contents/Resources/LICENSE.txt"
+
 # Ad-hoc code signing for the bundled frameworks and binary
 echo "[Standalone Deploy] Signing bundle with ad-hoc signature..."
 codesign --force --deep -s - "$APP_PATH"

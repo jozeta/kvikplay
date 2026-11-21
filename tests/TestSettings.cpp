@@ -31,6 +31,15 @@ int main(int argc, char* argv[]) {
     CHECK(settings.externalOpenInNewWindow() == true);
     settings.setExternalOpenInNewWindow(false);
 
+    // Update check at startup: on by default, can be turned off (About box).
+    CHECK(settings.checkForUpdates() == true);
+    settings.setCheckForUpdates(false);
+    settings.save();
+    settings.setCheckForUpdates(true);
+    settings.load();
+    CHECK(settings.checkForUpdates() == false);
+    settings.setCheckForUpdates(true);
+
     // Item 11: a recent file that no longer exists can be dropped from the list.
     settings.clearRecentFiles();
     settings.addRecentFile(QStringLiteral("/a/one.mkv"));

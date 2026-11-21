@@ -6,6 +6,7 @@
 #include <QTimer>
 #include "player/MediaPlayer.h"
 #include "player/FolderIndex.h"
+#include "update/UpdateManager.h"
 #include "player/ThumbnailWorker.h"
 #include "rendering/VideoRenderer.h"
 #include "window/AspectRatioManager.h"
@@ -114,6 +115,8 @@ private:
     std::unique_ptr<ThumbnailWorker> m_thumbnailWorker;
     AspectRatioManager m_aspectManager;
     FolderIndex m_folderIndex;
+    UpdateManager* m_updates{nullptr};
+    bool m_isExtraWindow{false}; // started with --cascade: no update prompt here
 
     QString m_currentFilePath;
     QString m_pendingOpen; // opened once the video surface is ready

@@ -91,6 +91,10 @@ void SettingsManager::load() {
         m_dialogueBoost = obj[QStringLiteral("dialogueBoost")].toBool(false);
     }
 
+    if (obj.contains(QStringLiteral("checkForUpdates"))) {
+        m_checkForUpdates = obj[QStringLiteral("checkForUpdates")].toBool(true);
+    }
+
     if (obj.contains(QStringLiteral("externalOpen"))) {
         m_externalOpenInNewWindow = obj[QStringLiteral("externalOpen")].toString() == QStringLiteral("newWindow");
     }
@@ -154,6 +158,7 @@ void SettingsManager::save() const {
     obj[QStringLiteral("startInFullscreen")] = m_startInFullscreen;
     obj[QStringLiteral("reverseTrackpadScrubbing")] = m_reverseTrackpadScrubbing;
     obj[QStringLiteral("dialogueBoost")] = m_dialogueBoost;
+    obj[QStringLiteral("checkForUpdates")] = m_checkForUpdates;
     obj[QStringLiteral("externalOpen")] = m_externalOpenInNewWindow ? QStringLiteral("newWindow") : QStringLiteral("replace");
 
     QJsonArray recArr;
