@@ -51,6 +51,17 @@ int main(int argc, char* argv[]) {
     std::cout << "  " << a.width() << "x" << a.height() << ", colours " << distinctColours(a) << std::endl;
     CHECK(distinctColours(a) >= 6);
 
+    // Format_RGB32 requires 0xFF in the alpha byte. mpv's "bgr0" writes 0 there, and Qt
+    // then drew the scaled thumbnail as transparent-but-added: washed out (1.2.0).
+    bool opaque = true;
+    for (int y = 0; y < a.height() && opaque; ++y) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(a.constScanLine(y));
+        for (int x = 0; x < a.width(); ++x) {
+            if ((row[x] >> 24) != 0xFF) { opaque = false; break; }
+        }
+    }
+    CHECK(opaque);
+
     std::cout << "[TestThumbnails] 9:16 clip after it gives a portrait frame..." << std::endl;
     worker.openFile(QFileInfo(QStringLiteral("test_media/test_9_16.mov")).absoluteFilePath());
     QImage b = nextThumbnail(app, worker, 1.0);

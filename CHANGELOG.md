@@ -4,6 +4,16 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+### Fixed
+- Timeline thumbnails looked washed out: mpv's `bgr0` pixels have 0 in the alpha byte, which
+  Qt's `Format_RGB32` requires to be 0xFF. Thumbnails are now made fully opaque (tested).
+- Windows build: use the SDK's DWM corner types, include `shlobj.h`, link `test_platform` with
+  the Windows libraries.
+
+### Added
+- Windows CI packages a standalone `Kvikplay-<version>-Windows-x64.zip` (Qt, MSYS2 DLLs and
+  their licence texts) as a build artifact.
+
 ## 1.2.1 — 2026-11-21
 
 ### Fixed

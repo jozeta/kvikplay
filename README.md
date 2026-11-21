@@ -33,9 +33,12 @@ decoding and HDR tone mapping. The interface is Qt 6.
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/screenshots/playback.jpg" alt="Kvikplay playing a video with the overlay visible"><br><sub>Playback with the overlay: file name, timeline, time, controls and volume</sub></td>
-    <td align="center" width="33%"><img src="docs/screenshots/menu.jpg" alt="The right-click menu over a playing video"><br><sub>Right-click-and-hold menu, grouped by task, with shortcuts</sub></td>
-    <td align="center" width="33%"><img src="docs/screenshots/inspector.jpg" alt="The media inspector showing codec and stream details"><br><sub>Media inspector (<code>I</code>): codecs, resolution, bitrates, hardware decoder</sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/playback.jpg" alt="Kvikplay playing a video with the on-screen controls visible"><br><sub>Playback: title, full-width timeline with times at both ends, white glyph controls</sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/timeline.jpg" alt="Hovering the timeline shows a frame preview with the time and chapter"><br><sub>Hover the timeline: frame preview with time and chapter</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><img src="docs/screenshots/menu.jpg" alt="The right-click menu over a playing video"><br><sub>Right-click-and-hold menu, grouped by task, with shortcuts</sub></td>
+    <td align="center" width="50%"><img src="docs/screenshots/inspector.jpg" alt="The media inspector showing codec and stream details"><br><sub>Media inspector (<code>I</code>): codecs, resolution, bitrates, hardware decoder</sub></td>
   </tr>
 </table>
 

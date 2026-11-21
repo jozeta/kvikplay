@@ -207,7 +207,15 @@ bool ThumbnailWorker::renderFrame(double timestamp, QImage& outImage) {
         {MPV_RENDER_PARAM_INVALID, nullptr}
     };
 
-    return mpv_render_context_render(m_rc, rparams) >= 0;
+    if (mpv_render_context_render(m_rc, rparams) < 0) return false;
+
+    // "bgr0" leaves the 4th byte 0, but Format_RGB32 must be 0xffRRGGBB; with 0 there Qt
+    // draws a scaled thumbnail as transparent-yet-added (washed out). Make it opaque.
+    for (int y = 0; y < h; ++y) {
+        QRgb* row = reinterpret_cast<QRgb*>(outImage.scanLine(y));
+        for (int x = 0; x < w; ++x) row[x] |= 0xFF000000u;
+    }
+    return true;
 }
 
 void ThumbnailWorker::run() {
