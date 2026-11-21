@@ -149,7 +149,14 @@ void MpvController::handleMpvEvent(mpv_event* event) {
         emit playbackStateChanged(m_state);
         break;
 
-    case MPV_EVENT_FILE_LOADED:
+    case MPV_EVENT_FILE_LOADED: {
+        // The title from the file's metadata (falls back to the file name in mpv).
+        // Untrusted text: the overlay shows it as plain text.
+        if (char* title = mpv_get_property_string(m_mpv, "media-title")) {
+            const QString t = QString::fromUtf8(title).trimmed();
+            if (!t.isEmpty() && t != m_mediaInfo.fileName) m_mediaInfo.title = t.left(200);
+            mpv_free(title);
+        }
         m_state = m_isPaused ? PlaybackState::Paused : PlaybackState::Playing;
         updateVideoParams();
         updateTracks();
@@ -157,6 +164,7 @@ void MpvController::handleMpvEvent(mpv_event* event) {
         emit playbackStateChanged(m_state);
         emit mediaLoaded(m_mediaInfo);
         break;
+    }
 
     case MPV_EVENT_END_FILE: {
         auto* end_data = static_cast<mpv_event_end_file*>(event->data);

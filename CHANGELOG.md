@@ -4,6 +4,25 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+## 1.2.0 — 2026-11-21
+
+### Changed
+- New "cinematic" on-screen controls: no boxes, soft top and bottom shading, title top left,
+  full-width timeline with chapter ticks and times at both ends (remaining time by default),
+  white glyph buttons (play, ±10 s, volume, subtitles, fullscreen). In small windows only the
+  essentials stay.
+- Centre messages: volume as a ring, others as a dark capsule.
+- Hover preview: rounded frame with a white border and a "time · chapter" caption.
+- The subtitles button opens the subtitle choices (tracks, add file, timing) above it.
+- The title shown is the file's metadata title when there is one.
+
+### Fixed
+- The "10" on the skip buttons is drawn as lines, so no font lookup at start.
+
+### Tests
+- `test_time_format` (clock and remaining-time text) and `test_overlay_render`, which renders
+  the overlay offscreen and checks the scrims, times, glyphs, volume ring and preview.
+
 ## 1.1.0 — 2026-11-21
 
 ### Added

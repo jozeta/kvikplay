@@ -22,6 +22,8 @@
 #include <QStandardPaths>
 #include <QProcess>
 #include <QPointer>
+#include <QMenu>
+#include <QActionGroup>
 #include <QCheckBox>
 #include <QPushButton>
 #include <algorithm>
@@ -77,9 +79,11 @@ MainWindow::MainWindow(QWidget* parent)
         m_overlay->showOsd(QStringLiteral("+10s"));
     });
     connect(m_overlay, &PlaybackOverlay::closeClicked, this, &QWidget::close);
+    connect(m_overlay, &PlaybackOverlay::fullscreenClicked, this, &MainWindow::toggleFullscreen);
+    connect(m_overlay, &PlaybackOverlay::subtitlesClicked, this, &MainWindow::showSubtitleMenu);
     connect(m_overlay, &PlaybackOverlay::volumeChanged, this, [this](int vol) {
         m_player->setVolume(vol);
-        m_overlay->showOsd(QStringLiteral("Volume %1%").arg(vol));
+        m_overlay->showVolumeLevel(vol, m_player->isMuted());
     });
     connect(m_overlay, &PlaybackOverlay::muteToggled, m_player.get(), &MediaPlayer::toggleMute);
     connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
@@ -442,7 +446,7 @@ void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, i
 
 void MainWindow::onMediaLoaded(const MediaInfo& info) {
     m_renderer->setMediaInfo(info);
-    m_overlay->setFileName(info.fileName);
+    m_overlay->setTitle(info.title, info.fileName);
     m_overlay->setDuration(info.duration);
     // Track menus are filled by tracksChanged, which mpv sends just before this.
 
@@ -484,7 +488,7 @@ void MainWindow::onVolumeChanged(int percent) {
 
 void MainWindow::onMuteChanged(bool muted) {
     m_overlay->setMuted(muted);
-    m_overlay->showOsd(muted ? QStringLiteral("Muted") : QStringLiteral("Unmuted"));
+    m_overlay->showVolumeLevel(m_player->volume(), muted);
 }
 
 void MainWindow::onPositionChanged(double seconds) {
@@ -665,6 +669,7 @@ void MainWindow::toggleFullscreen() {
     if (m_isFullscreen) {
         // Exit fullscreen -> restore windowed mode size and position
         m_isFullscreen = false;
+        m_overlay->setFullscreen(false);
         showNormal();
         if (m_normalGeometry.isValid()) {
             setGeometry(m_normalGeometry);
@@ -677,6 +682,7 @@ void MainWindow::toggleFullscreen() {
         // Enter fullscreen -> remember windowed size & position
         m_normalGeometry = geometry();
         m_isFullscreen = true;
+        m_overlay->setFullscreen(true);
         if (m_platform) {
             m_platform->setWindowRounded(this, false);
         }
@@ -804,6 +810,37 @@ MenuState MainWindow::buildMenuState() {
     s.externalOpenNewWindow = settings.externalOpenInNewWindow();
     s.recentFiles = settings.recentFiles();
     return s;
+}
+
+void MainWindow::showSubtitleMenu(const QPoint& buttonGlobalPos) {
+    // The subtitle part of the right-click menu, opened above the overlay's button.
+    QMenu menu(this);
+    menu.setStyleSheet(m_contextMenu->styleSheet());
+    auto* group = new QActionGroup(&menu);
+    bool anySelected = false;
+    for (const auto& t : m_player->subtitleTracks()) anySelected = anySelected || t.selected;
+    QAction* off = menu.addAction(QStringLiteral("Off"));
+    off->setCheckable(true);
+    off->setChecked(!anySelected);
+    group->addAction(off);
+    connect(off, &QAction::triggered, this, [this]() { m_player->setSubtitleTrack(0); });
+    if (!m_player->subtitleTracks().empty()) menu.addSeparator();
+    for (const auto& t : m_player->subtitleTracks()) {
+        QAction* a = menu.addAction(t.displayName().replace(QLatin1Char('&'), QStringLiteral("&&")));
+        a->setCheckable(true);
+        a->setChecked(t.selected);
+        group->addAction(a);
+        const int id = t.id;
+        connect(a, &QAction::triggered, this, [this, id]() { m_player->setSubtitleTrack(id); });
+    }
+    menu.addSeparator();
+    connect(menu.addAction(QStringLiteral("Add Subtitle File…")), &QAction::triggered,
+            m_contextMenu, &ContextMenu::addSubtitleFileTriggered);
+    connect(menu.addAction(QStringLiteral("Show 100 ms Earlier")), &QAction::triggered, this,
+            [this]() { emit m_contextMenu->subtitleDelayAdjusted(-0.1); });
+    connect(menu.addAction(QStringLiteral("Show 100 ms Later")), &QAction::triggered, this,
+            [this]() { emit m_contextMenu->subtitleDelayAdjusted(0.1); });
+    menu.exec(buttonGlobalPos - QPoint(0, menu.sizeHint().height() + 6));
 }
 
 void MainWindow::showContextMenu(const QPoint& globalPos) {
@@ -1105,7 +1142,7 @@ void MainWindow::wheelEvent(QWheelEvent* event) {
             int step = (dy > 0) ? 5 : -5;
             int newVol = std::clamp(m_player->volume() + step, 0, 100);
             m_player->setVolume(newVol);
-            m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
+            m_overlay->showVolumeLevel(newVol, m_player->isMuted());
         } else {
             // Vertical wheel seeking
             double seekAmount = (dy > 0) ? (mods & Qt::ShiftModifier ? 30.0 : 10.0)
@@ -1304,7 +1341,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Up: {
         int newVol = std::clamp(m_player->volume() + 5, 0, 100);
         m_player->setVolume(newVol);
-        m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
+        m_overlay->showVolumeLevel(newVol, m_player->isMuted());
         m_overlay->showOverlay();
         m_osdTimer->start(5000);
         event->accept();
@@ -1313,7 +1350,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Down: {
         int newVol = std::clamp(m_player->volume() - 5, 0, 100);
         m_player->setVolume(newVol);
-        m_overlay->showOsd(QStringLiteral("Volume %1%").arg(newVol));
+        m_overlay->showVolumeLevel(newVol, m_player->isMuted());
         m_overlay->showOverlay();
         m_osdTimer->start(5000);
         event->accept();

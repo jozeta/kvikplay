@@ -109,6 +109,7 @@ private:
     void openFileDialog();
     MenuState buildMenuState();
     void showContextMenu(const QPoint& globalPos);
+    void showSubtitleMenu(const QPoint& buttonGlobalPos);
 
     std::unique_ptr<MediaPlayer> m_player;
     std::unique_ptr<PlatformIntegration> m_platform;

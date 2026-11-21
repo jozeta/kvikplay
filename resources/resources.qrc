@@ -1,13 +1,16 @@
 <RCC>
     <qresource prefix="/">
-        <file alias="icons/play.svg">icons/play.svg</file>
-        <file alias="icons/pause.svg">icons/pause.svg</file>
-        <file alias="icons/seek_backward.svg">icons/seek_backward.svg</file>
-        <file alias="icons/seek_forward.svg">icons/seek_forward.svg</file>
-        <file alias="icons/volume_high.svg">icons/volume_high.svg</file>
-        <file alias="icons/volume_mute.svg">icons/volume_mute.svg</file>
-        <file alias="icons/close.svg">icons/close.svg</file>
         <file alias="icons/audio_disc.svg">icons/audio_disc.svg</file>
         <file alias="icons/app_icon.svg">icons/app_icon.svg</file>
+        <file alias="icons/osd/play.svg">icons/osd/play.svg</file>
+        <file alias="icons/osd/pause.svg">icons/osd/pause.svg</file>
+        <file alias="icons/osd/back10.svg">icons/osd/back10.svg</file>
+        <file alias="icons/osd/forward10.svg">icons/osd/forward10.svg</file>
+        <file alias="icons/osd/volume.svg">icons/osd/volume.svg</file>
+        <file alias="icons/osd/mute.svg">icons/osd/mute.svg</file>
+        <file alias="icons/osd/subtitles.svg">icons/osd/subtitles.svg</file>
+        <file alias="icons/osd/fullscreen.svg">icons/osd/fullscreen.svg</file>
+        <file alias="icons/osd/fullscreen_exit.svg">icons/osd/fullscreen_exit.svg</file>
+        <file alias="icons/osd/close.svg">icons/osd/close.svg</file>
     </qresource>
 </RCC>

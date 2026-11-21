@@ -2,7 +2,7 @@
 
 > A fast, lightweight, frameless video and audio player for macOS and Windows.
 
-**Version 1.1.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
+**Version 1.2.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
 
 Kvikplay is for people who want a video to open instantly and then get out of the way. There is no
 title bar, toolbar or playlist: the video fills a rounded, borderless window that keeps the video's
@@ -44,6 +44,17 @@ decoding and HDR tone mapping. The interface is Qt 6.
 ---
 
 ## What's new
+
+### 1.2.0 (2026-11-21)
+
+- **New on-screen controls ("cinematic"):** no boxes, just soft shading at the top and bottom.
+  The title sits top left, a full-width timeline with chapter ticks shows elapsed time on the
+  left and remaining time on the right (click it for the total), and the controls are clean white
+  glyphs: play, back and forward 10 s, volume, subtitles and fullscreen.
+- **Centre messages:** volume shows as a ring, other messages as a small dark capsule.
+- **Hover preview:** a rounded frame with the time and chapter name.
+- **Subtitles button** opens the subtitle choices right above it.
+- The title comes from the file's metadata when it has one.
 
 ### 1.1.0 (2026-11-21)
 
@@ -90,10 +101,15 @@ Older and upcoming changes: [CHANGELOG.md](CHANGELOG.md).
 - Dialogue boost: dynamic audio normalisation (`dynaudnorm`) that lifts quiet speech.
 
 **Overlay**
-- Appears on mouse movement (also while another app is in front), fades out after 5 seconds. Shows the file name, a timeline with a
-  thumbnail preview on hover, elapsed or remaining time (click the time to switch), play/pause,
-  ±10 s and close buttons, and a volume slider.
-- Short on-screen messages for every action (`+10s`, `Volume 75%`, `Speed 1.5x`, …).
+- Appears on mouse movement (also while another app is in front), fades out after 5 seconds.
+  No boxes: soft shading at the top and bottom keeps it readable on any picture.
+- Top: the title (from the file's metadata, else the file name) and the close button.
+- Bottom: a full-width timeline with chapter ticks and a frame preview on hover; elapsed time on
+  the left, remaining time on the right (click it to show the total length); play/pause, back
+  and forward 10 s on the left; volume, subtitles and fullscreen on the right. In a small window
+  only play/pause, volume and fullscreen stay.
+- Short messages in the middle of the picture for every action: the volume as a ring, others
+  (`+10s`, `Speed 1.5x`, …) as a small dark capsule.
 - Media inspector (`I`): container, codecs, resolution, frame rate, bitrates, hardware decoder,
   dropped frames, audio channels and sample rate, updated twice a second.
 

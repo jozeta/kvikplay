@@ -53,8 +53,9 @@ keep **every** screenshot on that same file. When retaking one, retake any older
 different video too.
 
 Current shots (2026-11-21, macOS): `playback.jpg`, `menu.jpg`, `inspector.jpg` (retaken after the
-background fix) and `menu.jpg` (the redesigned menu), saved as 1280 px JPEG. Still owed: a
-timeline hover-preview shot (needs a real mouse, see below).
+background fix) and `menu.jpg` (the redesigned menu), saved as 1280 px JPEG. `playback.jpg` is the
+1.2.0 overlay rendered by `test_overlay_render`. Still owed: `inspector.jpg` shows the pre-1.2.0
+controls at the bottom and should be retaken.
 
 How they were taken: run the app with the file above, then drive it with synthetic `CGEvent`
 mouse and key events. The window must be clicked (focused) before hovering shows the overlay.
@@ -103,3 +104,8 @@ popup menu.
   instance: `src/platform/SingleInstance.*`.
 - Driving the app with synthetic CGEvent mouse moves does not reliably reach Qt widgets; keys
   do. Check hover behaviour by hand.
+- Never drive the real UI with synthetic clicks/keys while the user may be at the Mac: they land
+  in whatever app is in front. For visual checks of the overlay use `test_overlay_render`:
+  `KVIKPLAY_RENDER_BG=<frame.jpg> KVIKPLAY_RENDER_THUMB=<thumb.jpg> KVIKPLAY_RENDER_OUT=<dir>`
+  writes `osd-controls.png`, `osd-volume.png` and `osd-preview.png` (the README's `playback.jpg`
+  is `osd-controls.png` over a Big Buck Bunny frame).

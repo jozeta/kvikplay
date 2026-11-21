@@ -14,6 +14,8 @@
 
 namespace kvikplay {
 
+// Full-width timeline, painted by hand (no QSlider style): a 6 px track, the played
+// part in white, chapter ticks and a round handle that grows while hovered.
 class TimelineSlider : public QSlider {
     Q_OBJECT
 
@@ -38,6 +40,7 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void enterEvent(QEnterEvent* event) override;
     void leaveEvent(QEvent* event) override;
 
 private:
@@ -46,10 +49,13 @@ private:
     double m_duration{0.0};
     double m_position{0.0};
     bool m_dragging{false};
+    bool m_hovered{false};
     qint64 m_lastSeekDispatchMs{0};
     std::vector<ChapterInfo> m_chapters;
 };
 
+// The "cinematic" overlay: no boxes, just soft scrims at the top and bottom, the title
+// top-left, a full-width timeline with times at both ends, and bare white glyph buttons.
 class PlaybackOverlay : public QWidget {
     Q_OBJECT
 
@@ -59,13 +65,17 @@ public:
     void setPlaying(bool playing);
     void setVolume(int percent);
     void setMuted(bool muted);
-    void setFileName(const QString& name);
+    void setFullscreen(bool fullscreen);
+    void setTitle(const QString& title, const QString& fileName);
     void setPosition(double seconds);
     void setDuration(double seconds);
     void setChapters(const std::vector<ChapterInfo>& chapters);
     void setThumbnail(double seconds, const QImage& img);
 
+    // Short message in the centre ("+10 s", "Speed 1.5×").
     void showOsd(const QString& message);
+    // Volume in the centre as a ring.
+    void showVolumeLevel(int percent, bool muted);
 
     void showOverlay();
     void hideOverlay();
@@ -75,6 +85,8 @@ signals:
     void seekBackwardClicked();
     void seekForwardClicked();
     void closeClicked();
+    void fullscreenClicked();
+    void subtitlesClicked(const QPoint& globalPos);
     void volumeChanged(int percent);
     void muteToggled();
     void seekRequested(double seconds, bool exact);
@@ -82,6 +94,7 @@ signals:
     void thumbnailRequested(double seconds);
 
 protected:
+    void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -96,37 +109,39 @@ private slots:
     void onHoverLeft();
 
 private:
-    void setupUi();
+    QPushButton* makeGlyphButton(const QString& icon, int size, int iconSize, const QString& name,
+                                 const QString& tip);
     void positionControls();
-    void updateTimeLabel();
-    static QString formatTime(double seconds);
+    void updateTimeLabels();
+    QString chapterAt(double seconds) const;
 
-    QLabel* m_filenameLabel{nullptr};
+    QLabel* m_titleLabel{nullptr};
+    QLabel* m_fileLabel{nullptr};
     QPushButton* m_closeButton{nullptr};
 
-    // Timeline row
-    QWidget* m_timelineContainer{nullptr};
     TimelineSlider* m_timelineSlider{nullptr};
-    QPushButton* m_timeLabel{nullptr};
+    QLabel* m_elapsedLabel{nullptr};
+    QPushButton* m_endTimeButton{nullptr};
     TimelinePreviewCard* m_previewCard{nullptr};
 
-    // Central buttons
-    QWidget* m_controlsContainer{nullptr};
-    QPushButton* m_seekBackBtn{nullptr};
     QPushButton* m_playPauseBtn{nullptr};
+    QPushButton* m_seekBackBtn{nullptr};
     QPushButton* m_seekFwdBtn{nullptr};
-
     VolumeControl* m_volumeControl{nullptr};
+    QPushButton* m_subtitlesBtn{nullptr};
+    QPushButton* m_fullscreenBtn{nullptr};
+
     OsdNotification* m_osdNotification{nullptr};
 
     QGraphicsOpacityEffect* m_opacityEffect{nullptr};
     QPropertyAnimation* m_fadeAnimation{nullptr};
 
+    std::vector<ChapterInfo> m_chapters;
     double m_position{0.0};
     double m_duration{0.0};
     int m_lastReportedSec{-1};
     bool m_isPlaying{false};
-    bool m_showRemainingTime{false};
+    bool m_showTotalTime{false}; // right-hand time: remaining (default) or total
 
     // ⏩: a tap seeks +10 s, holding it plays at 2x until released.
     QTimer* m_fwdHoldTimer{nullptr};
