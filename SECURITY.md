@@ -38,12 +38,16 @@ in an issue.
 1. **Decoder vulnerability in a crafted media file.** Mitigation: keep libmpv/FFmpeg current in
    the bundled app; hardware decoding narrows the software decoder surface for common codecs.
 2. **Rich-text injection through a file name or metadata.** A name such as `<img src=…>.mkv` can be
-   interpreted as HTML by a `QLabel` in `Qt::AutoText` mode. Mitigation (planned, not yet in
-   place as of 2026-11-21): set labels that show untrusted text to `Qt::PlainText`.
+   interpreted as HTML by a `QLabel` in `Qt::AutoText` mode. Mitigation: labels with untrusted text
+   use `Qt::PlainText`; the OSD draws plain text; the inspector escapes every value.
 3. **A media or playlist file that makes libmpv reach out to the network or read other files**
-   (playlists, EDL, reference files). Today `ytdl` is off for the main player and libmpv refuses
-   unsafe playlist entries by default (`load-unsafe-playlists=no`). Planned (not yet in place):
-   open only `FormatRegistry` formats on every path (the file dialog's "All Files" and recent
-   files currently bypass it) and set `access-references=no`.
+   (playlists, EDL, reference files). Mitigation: every open path checks `FormatRegistry`; both
+   libmpv instances use `src/player/MpvOptions.h` (`config=no`, `load-scripts=no`, `ytdl=no`,
+   `access-references=no`, `load-unsafe-playlists=no`), which also stops a playlist renamed to
+   `.mp4` from loading what it references (tested in `test_playback`).
 4. **File association changes.** Registration writes only per-user keys (`HKCU`) and only for the
    extensions the user ticks.
+5. **Windows single-instance hand-over.** A second launch sends its file path to the running
+   window with `WM_COPYDATA`. Only same-user, same-or-higher integrity processes can send it
+   (UIPI); the message must carry Kvikplay's tag and a bounded UTF-16 path, and the path goes
+   through the same checks as any other open.

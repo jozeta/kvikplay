@@ -4,6 +4,57 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+### Added
+- Right-click menu: **Opening Files from Finder/Explorer** → Replace Current Video (default) or
+  Open in New Window. Drag-and-drop and Open File always replace the current video.
+- Right-click menu: **Start in Fullscreen**.
+- Windows: one player per session; opening a file from Explorer hands it to the running window
+  (or opens a new window, per the setting above).
+- Windows: media flyout, lock screen and media keys (System Media Transport Controls), matching
+  macOS Now Playing.
+- Version in the About box and `kvikplay --version`; one version number from CMake.
+- `KVIKPLAY_CONFIG_DIR` to use another settings folder.
+- CI on macOS and Windows (build, tests, ShellCheck, clang-tidy) and security scanning.
+- Screen-reader names and tooltips on the overlay controls.
+
+### Fixed
+- Black window at launch: a file opened before the video surface existed made mpv use its
+  "null" video output. Files now open once the surface is ready.
+- Replaying after the end left the player stuck in "ended" (Space restarted instead of pausing).
+- Screenshots: reported only once saved, failures shown, clipboard copy works; no overwrite
+  within the same second.
+- Timeline thumbnails: real frames (no blank or stale images), correct shape for vertical video
+  after a landscape one, none for audio files.
+- Timeline preview card and media inspector now have their dark background.
+- Minimum window size no longer grows from earlier videos; the window reopens on the monitor it
+  was on; Always on Top no longer loses the rounded corners.
+- Holding `C` while switching apps no longer leaves 2× speed on; tapping ⏩ no longer flashes the
+  speed boost.
+- Missing recent files are removed from the list; resume positions drop the oldest entry, not
+  the alphabetically first; settings are written atomically.
+- "Help & Shortcuts" label; Qt painter warnings from nested fade effects; speed set with
+  `-`/`=`/`Backspace` is remembered.
+- Windows: build error (`windowsx.h`), resize borders at display scaling above 100 %, minimum size
+  while resizing, white frame strip, hardware decoding that fell back to software, console window.
+- Tests could not fail in Release builds; one real failure (`setSpeed`) was hidden.
+
+### Security
+- File names, track and chapter titles are shown as plain text (no Qt rich text from media).
+- Only supported formats are opened on every path; libmpv runs without user config or scripts,
+  without youtube-dl and without following references inside files (a playlist renamed to `.mp4`
+  can no longer pull in other files).
+- macOS: the window activation observer is removed on shutdown.
+- Unticking a format in File Associations removes Kvikplay's registration (Windows).
+
+### Performance
+- libmpv starts without its built-in Lua scripts: 7 threads instead of 13 and about 3 MB less
+  per instance (two instances run).
+- Thumbnails decode with hardware copy-back on a low-priority thread, and only after the first
+  hover.
+- Next/previous file uses a cached, background-prefetched folder index.
+- Fewer per-frame and per-event costs (property ids, cached icons, one cursor update per move);
+  Windows window is opaque (no layered-window composition).
+
 ### Documentation
 - README rewritten to the project standard: installation, every setting with its default,
   how-tos, version, "What's new", a macOS/Windows feature table, and screenshots (playback, menu,

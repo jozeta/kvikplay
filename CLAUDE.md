@@ -34,6 +34,10 @@ Tests use plain `assert()`. **Run them in a Debug build**: Release defines `NDEB
 every assert, so a Release `ctest` passes whatever happens. `test_playback` needs the media in
 `test_media/` (gitignored for now, so a fresh clone can't run it).
 
+Tests use `CHECK()` from `tests/TestCheck.h` (never `assert()`, which Release removes), run from
+the source tree and get `KVIKPLAY_CONFIG_DIR` pointed at a temp folder (see `CMakeLists.txt`).
+CI (`.github/workflows/ci.yml`) builds and tests on macOS and on Windows via MSYS2.
+
 A `build/` configured before the repo moved to `~/Desktop/code/kvikplay` points at old paths;
 delete it and configure again if `ctest` reports "Not Run".
 
@@ -86,3 +90,12 @@ popup menu.
   README, CHANGELOG, Info.plist and the Windows `.rc` must match it.
 - libmpv requires `LC_NUMERIC=C`; keep the `setlocale` calls.
 - The render context must be freed before the mpv core is destroyed (see `~MainWindow`).
+- Never load a file before `VideoRenderer` has created its render context
+  (`isRenderSetupDone()`): mpv would pick its `null` video output and the window stays black.
+  `MainWindow::openFile` queues the file until `renderSetupFinished`.
+- Every libmpv instance starts with `applyBaseMpvOptions()` (`src/player/MpvOptions.h`).
+- Opening from Finder/Explorer goes through `MainWindow::openExternalFile` (obeys the
+  "new window" setting); everything else uses `openFile` (always replaces). Windows single
+  instance: `src/platform/SingleInstance.*`.
+- Driving the app with synthetic CGEvent mouse moves does not reliably reach Qt widgets; keys
+  do. Check hover behaviour by hand.

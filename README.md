@@ -76,7 +76,7 @@ Older and upcoming changes: [CHANGELOG.md](CHANGELOG.md).
   100 files, when you stopped more than 5 s from the start and the end).
 - Plays the next file in the folder when one ends. `]`/`[` and PageDown/PageUp move through the
   folder in natural order (`Episode 2` before `Episode 10`).
-- Hold `C` (or hold the ⏩ button) for 2× speed; release to go back. Speed steps of ±0.1× from
+- Hold `C` (or hold the ⏩ button) for 2× speed; release to go back. A short tap on ⏩ skips 10 s. Speed steps of ±0.1× from
   0.25× to 4×, with pitch correction.
 - Frame stepping, ±10 s / ±30 s seeking, chapter jumps with chapter ticks on the timeline.
 - Audio, video and subtitle track selection. Subtitles next to the video are found automatically;
@@ -84,7 +84,7 @@ Older and upcoming changes: [CHANGELOG.md](CHANGELOG.md).
 - Dialogue boost: dynamic audio normalisation (`dynaudnorm`) that lifts quiet speech.
 
 **Overlay**
-- Appears on mouse movement, fades out after 5 seconds. Shows the file name, a timeline with a
+- Appears on mouse movement (also while another app is in front), fades out after 5 seconds. Shows the file name, a timeline with a
   thumbnail preview on hover, elapsed or remaining time (click the time to switch), play/pause,
   ±10 s and close buttons, and a volume slider.
 - Short on-screen messages for every action (`+10s`, `Volume 75%`, `Speed 1.5x`, …).
@@ -108,15 +108,16 @@ Kvikplay aims for the same features on both systems, adapted to each OS. Current
 |---|---|---|
 | Frameless rounded window, shadow | ✅ Cocoa layer, 14 px radius | ✅ DWM rounding (Windows 11; square on Windows 10) |
 | Aspect-locked resizing | ✅ `NSWindow setAspectRatio` | ✅ `WM_SIZING` |
-| Hardware decoding | ✅ VideoToolbox | ⚠️ `d3d11va` requested; may fall back to software with the OpenGL renderer, under review |
-| Open a file from Finder / Explorer while running | ✅ Opens in the running window | ⚠️ Starts a second copy of the app |
-| Now Playing and media keys | ✅ Control Center, lock screen, media keys | ❌ Not yet (planned: System Media Transport Controls) |
+| Hardware decoding | ✅ VideoToolbox | ✅ `auto-safe` (D3D11/DXVA2 with a working OpenGL path, else copy-back) |
+| Open a file from Finder / Explorer while running | ✅ Replaces the video, or a new window (menu choice) | ✅ Same: a second launch hands the file over, or opens a new window |
+| Now Playing and media keys | ✅ Control Center, lock screen, media keys | ✅ Media flyout, lock screen, media keys (System Media Transport Controls) |
+| Controls appear on hover when the app is in the background | ✅ Own tracking area | ✅ Windows delivers the mouse movement |
 | Keep display awake while playing | ✅ IOKit power assertion | ✅ `SetThreadExecutionState` |
-| File associations | ✅ Launch Services | ✅ Per-user registry + Windows "Default apps" |
+| File associations | ✅ Launch Services; to undo, use Finder → Get Info → Open with | ✅ Per-user registry + Windows "Default apps"; unticking removes it |
 | Open-file shortcut | `Cmd+O` | `Ctrl+O` |
 
-The Windows build has not been verified on Windows during the latest review; see the open items in
-the review notes before relying on it.
+The Windows-only code is compiled and tested by CI (MSYS2, see `.github/workflows/ci.yml`) but
+has not yet been run by hand on a Windows PC.
 
 ---
 
@@ -164,6 +165,12 @@ press).
 
 **Add a subtitle file.** Drag the `.srt`, `.ass`, `.vtt`, `.ssa`, `.sub` or `.idx` file onto the
 window.
+
+**Choose what opening a file from Finder or Explorer does.** Right-click and hold → **Opening Files
+from Finder** (Explorer on Windows) → **Replace Current Video** (the default) or **Open in New
+Window**. A new window is a separate player with its own playback and volume, placed slightly
+offset from the first. Dragging a file onto a window, **Open File…** and **Open Recent** always
+replace the video in that window.
 
 **Make Kvikplay the default player.** Right-click and hold → **File Associations…**, tick the
 formats, **Save**. On Windows, also confirm in **Settings → Apps → Default apps** (the dialog has a
@@ -239,14 +246,20 @@ Settings are changed in the app (menu toggles, volume, window size) and saved to
 | `alwaysOnTop` | `false` | Menu → Always on Top | Keep the window above others |
 | `reverseTrackpadScrubbing` | `false` | Menu → Reverse Trackpad Scrubbing | Swap the swipe-to-seek direction |
 | `dialogueBoost` | `false` | Menu → Quiet Dialogue Boost, `N` | Dynamic audio normalisation |
-| `playbackSpeed` | `1.0` | (not yet saved by the app) | Speed applied at start, 0.25–4.0 |
-| `startInFullscreen` | `false` | (not used yet) | Reserved |
+| `playbackSpeed` | `1.0` | `-`, `=`, `Backspace` | Speed applied at start, 0.25–4.0 (the 2× hold is not saved) |
+| `startInFullscreen` | `false` | Menu → Start in Fullscreen | Go fullscreen when the app starts |
+| `externalOpen` | `"replace"` | Menu → Opening Files from Finder/Explorer | `"replace"` or `"newWindow"`: what opening a file from Finder/Explorer does while a video plays |
 | `recentFiles` | `[]` | Opening files; Menu → Open Recent → Clear Recent | Last 8 files |
-| `resumePositions` | `{}` | Closing or switching files | Path → seconds, up to 100 files |
+| `resumePositions` | `[]` | Closing or switching files | `{path, pos}` list, the 100 most recently saved files |
 | `associations` | `[]` | File Associations dialog | Extensions you chose to associate |
 
 Quit Kvikplay before editing the file by hand; invalid values fall back to the defaults. Delete the
-file to reset everything.
+file to reset everything. The file is written atomically, so a crash can't leave it half-written.
+
+Set the environment variable `KVIKPLAY_CONFIG_DIR` to use another folder for `config.json`
+(the tests use this to stay away from your real settings).
+
+Command line: `kvikplay [file]`, `kvikplay --version` prints the version.
 
 Fixed behaviour (not configurable): overlay hides after 5 s; seek steps 10 s / 30 s; volume steps
 5 %; demuxer cache 128 MiB / 15 s read-ahead; screenshots go to the Desktop.
@@ -292,15 +305,13 @@ builds with `-DKVIKPLAY_STANDALONE=OFF`.
 
 ### Tests
 
-The tests use `assert()`, which Release builds compile out, so run them from a Debug build:
-
 ```bash
-cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug -DKVIKPLAY_STANDALONE=OFF
-cmake --build build-debug -j8
-ctest --test-dir build-debug --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
-`test_playback` needs the sample files in `test_media/`, which are not in the repository yet.
+The tests use a `CHECK()` macro that works in every build type, run from the source folder (the
+sample clips are in `test_media/`) and use a temporary settings folder. CI runs them on macOS and
+Windows for every push.
 
 ### Run
 
