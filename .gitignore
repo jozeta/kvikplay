@@ -37,5 +37,3 @@ cmake-build-*/
 CMakeUserPresets.json
 # Generated icon set (rebuilt from resources/icons/app_icon.svg)
 *.iconset/
-# Local test media (not yet committed, see CLAUDE.md)
-test_media/

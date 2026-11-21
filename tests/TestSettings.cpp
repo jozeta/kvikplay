@@ -1,63 +1,90 @@
-#include <cassert>
+#include "TestCheck.h"
 #include <iostream>
 #include <QCoreApplication>
 #include "config/SettingsManager.h"
+#include <QFileInfo>
+#include <QTemporaryDir>
 
 int main(int argc, char* argv[]) {
     QCoreApplication app(argc, argv);
     using namespace kvikplay;
 
+    // Item 32: KVIKPLAY_CONFIG_DIR keeps tests (and screenshot runs) away from
+    // the user's real config.json. Must be set before the singleton is created.
+    QTemporaryDir tmp;
+    CHECK(tmp.isValid());
+    qputenv("KVIKPLAY_CONFIG_DIR", tmp.path().toUtf8());
+
     std::cout << "[TestSettings] Checking settings persistence..." << std::endl;
 
     auto& settings = SettingsManager::instance();
+    settings.save();
+    CHECK(QFileInfo::exists(tmp.path() + QStringLiteral("/config.json")));
+
+    // Item 10: resume positions are evicted oldest-first, not alphabetically.
+    std::cout << "[TestSettings] Checking resume-position eviction order..." << std::endl;
+    settings.setResumePosition(QStringLiteral("/z/oldest.mkv"), 42.0);
+    for (int i = 0; i < 100; ++i) {
+        settings.setResumePosition(QStringLiteral("/m/f%1.mkv").arg(i, 3, 10, QChar('0')), 60.0 + i);
+    }
+    CHECK(settings.resumePosition(QStringLiteral("/z/oldest.mkv")) == 0.0);   // evicted
+    CHECK(settings.resumePosition(QStringLiteral("/m/f000.mkv")) == 60.0);    // kept
+    // Updating an entry makes it the newest; order survives save + load.
+    settings.setResumePosition(QStringLiteral("/m/f000.mkv"), 61.0);
+    settings.save();
+    settings.load();
+    settings.setResumePosition(QStringLiteral("/new.mkv"), 30.0);
+    CHECK(settings.resumePosition(QStringLiteral("/m/f000.mkv")) == 61.0);    // refreshed, kept
+    CHECK(settings.resumePosition(QStringLiteral("/m/f001.mkv")) == 0.0);     // now the oldest, evicted
+    CHECK(settings.resumePosition(QStringLiteral("/new.mkv")) == 30.0);
     settings.setVolume(85);
-    assert(settings.volume() == 85);
+    CHECK(settings.volume() == 85);
 
     settings.setMuted(true);
-    assert(settings.isMuted() == true);
+    CHECK(settings.isMuted() == true);
 
     settings.setAlwaysOnTop(true);
-    assert(settings.alwaysOnTop() == true);
+    CHECK(settings.alwaysOnTop() == true);
 
     settings.setWindowSize(QSize(1280, 720));
-    assert(settings.windowSize() == QSize(1280, 720));
+    CHECK(settings.windowSize() == QSize(1280, 720));
 
     settings.setReverseTrackpadScrubbing(true);
-    assert(settings.reverseTrackpadScrubbing() == true);
+    CHECK(settings.reverseTrackpadScrubbing() == true);
 
     QStringList exts = {QStringLiteral(".mp4"), QStringLiteral(".mkv")};
     settings.setAssociatedExtensions(exts);
-    assert(settings.associatedExtensions().size() == 2);
+    CHECK(settings.associatedExtensions().size() == 2);
 
     // Resume positions
     settings.setResumePosition(QStringLiteral("/path/to/ep1.mkv"), 123.45);
-    assert(std::abs(settings.resumePosition(QStringLiteral("/path/to/ep1.mkv")) - 123.45) < 0.01);
+    CHECK(std::abs(settings.resumePosition(QStringLiteral("/path/to/ep1.mkv")) - 123.45) < 0.01);
     settings.clearResumePosition(QStringLiteral("/path/to/ep1.mkv"));
-    assert(settings.resumePosition(QStringLiteral("/path/to/ep1.mkv")) == 0.0);
+    CHECK(settings.resumePosition(QStringLiteral("/path/to/ep1.mkv")) == 0.0);
 
     // Recent files
     settings.clearRecentFiles();
-    assert(settings.recentFiles().isEmpty());
+    CHECK(settings.recentFiles().isEmpty());
     settings.addRecentFile(QStringLiteral("/media/movie1.mp4"));
     settings.addRecentFile(QStringLiteral("/media/movie2.mp4"));
-    assert(settings.recentFiles().size() == 2);
-    assert(settings.recentFiles().first() == QStringLiteral("/media/movie2.mp4"));
+    CHECK(settings.recentFiles().size() == 2);
+    CHECK(settings.recentFiles().first() == QStringLiteral("/media/movie2.mp4"));
 
     // Dialogue boost
     settings.setDialogueBoost(true);
-    assert(settings.dialogueBoost() == true);
+    CHECK(settings.dialogueBoost() == true);
 
     // Save and reload
     settings.save();
     settings.load();
 
-    assert(settings.volume() == 85);
-    assert(settings.isMuted() == true);
-    assert(settings.alwaysOnTop() == true);
-    assert(settings.windowSize() == QSize(1280, 720));
-    assert(settings.reverseTrackpadScrubbing() == true);
-    assert(settings.dialogueBoost() == true);
-    assert(settings.recentFiles().size() == 2);
+    CHECK(settings.volume() == 85);
+    CHECK(settings.isMuted() == true);
+    CHECK(settings.alwaysOnTop() == true);
+    CHECK(settings.windowSize() == QSize(1280, 720));
+    CHECK(settings.reverseTrackpadScrubbing() == true);
+    CHECK(settings.dialogueBoost() == true);
+    CHECK(settings.recentFiles().size() == 2);
 
     // Reset back to defaults
     settings.setReverseTrackpadScrubbing(false);

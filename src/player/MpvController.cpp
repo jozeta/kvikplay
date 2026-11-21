@@ -465,6 +465,12 @@ void MpvController::toggleMute() {
 void MpvController::setSpeed(double speed) {
     if (!m_mpv) return;
     double clamped = std::clamp(speed, 0.25, 4.0);
+    // Update the cached value now (like volume) so callers read what they just set;
+    // mpv's property observer confirms it asynchronously.
+    if (m_speed != clamped) {
+        m_speed = clamped;
+        emit speedChanged(m_speed);
+    }
     mpv_set_property_async(m_mpv, 0, "speed", MPV_FORMAT_DOUBLE, &clamped);
 }
 

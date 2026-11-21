@@ -1,4 +1,4 @@
-#include <cassert>
+#include "TestCheck.h"
 #include <iostream>
 #include "formats/FormatRegistry.h"
 
@@ -9,42 +9,42 @@ int main() {
     std::cout << "[TestFormatRegistry] Checking formats..." << std::endl;
 
     // Check common video formats
-    assert(reg.isSupported(".mp4"));
-    assert(reg.isSupported("video.MKV"));
-    assert(reg.isSupported("/path/to/movie.mov"));
-    assert(reg.isVideo(".mp4"));
-    assert(!reg.isAudio(".mp4"));
+    CHECK(reg.isSupported(".mp4"));
+    CHECK(reg.isSupported("video.MKV"));
+    CHECK(reg.isSupported("/path/to/movie.mov"));
+    CHECK(reg.isVideo(".mp4"));
+    CHECK(!reg.isAudio(".mp4"));
 
     // Check other video formats
-    assert(reg.isSupported(".webm"));
-    assert(reg.isSupported(".flv"));
-    assert(reg.isSupported(".ts"));
-    assert(reg.isVideo(".ts"));
+    CHECK(reg.isSupported(".webm"));
+    CHECK(reg.isSupported(".flv"));
+    CHECK(reg.isSupported(".ts"));
+    CHECK(reg.isVideo(".ts"));
 
     // Check audio formats
-    assert(reg.isSupported(".mp3"));
-    assert(reg.isSupported(".flac"));
-    assert(reg.isSupported("song.WAV"));
-    assert(reg.isAudio(".mp3"));
-    assert(!reg.isVideo(".mp3"));
+    CHECK(reg.isSupported(".mp3"));
+    CHECK(reg.isSupported(".flac"));
+    CHECK(reg.isSupported("song.WAV"));
+    CHECK(reg.isAudio(".mp3"));
+    CHECK(!reg.isVideo(".mp3"));
 
     // Check unsupported
-    assert(!reg.isSupported(".txt"));
-    assert(!reg.isSupported(".exe"));
-    assert(!reg.isSupported(""));
+    CHECK(!reg.isSupported(".txt"));
+    CHECK(!reg.isSupported(".exe"));
+    CHECK(!reg.isSupported(""));
 
     // Check categories
     auto common = reg.formatsByCategory(FormatCategory::CommonVideo);
-    assert(!common.empty());
+    CHECK(!common.empty());
     auto other = reg.formatsByCategory(FormatCategory::OtherVideo);
-    assert(!other.empty());
+    CHECK(!other.empty());
     auto audio = reg.formatsByCategory(FormatCategory::Audio);
-    assert(!audio.empty());
+    CHECK(!audio.empty());
 
     // Check file filter
     QString filter = reg.fileFilterString();
-    assert(filter.contains("*.mp4"));
-    assert(filter.contains("*.mp3"));
+    CHECK(filter.contains("*.mp4"));
+    CHECK(filter.contains("*.mp3"));
 
     std::cout << "[TestFormatRegistry] All tests passed!" << std::endl;
     return 0;

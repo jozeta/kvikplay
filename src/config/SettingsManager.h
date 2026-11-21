@@ -4,7 +4,8 @@
 #include <QSize>
 #include <QPoint>
 #include <QStringList>
-#include <QMap>
+#include <utility>
+#include <vector>
 
 namespace kvikplay {
 
@@ -71,6 +72,7 @@ signals:
 private:
     SettingsManager();
     QString configFilePath() const;
+    static constexpr int kMaxResumePositions = 100;
 
     QSize m_windowSize{960, 540};
     QPoint m_windowPosition{-1, -1};
@@ -82,7 +84,8 @@ private:
     bool m_reverseTrackpadScrubbing{false};
     bool m_dialogueBoost{false};
     QStringList m_recentFiles;
-    QMap<QString, double> m_resumePositions;
+    // Oldest first; capped at kMaxResumePositions (least recently saved is dropped).
+    std::vector<std::pair<QString, double>> m_resumePositions;
     QStringList m_associatedExtensions;
 };
 

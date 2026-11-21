@@ -1,6 +1,6 @@
 #include <QCoreApplication>
 #include <QTimer>
-#include <cassert>
+#include "TestCheck.h"
 #include <iostream>
 #include <cmath>
 #include <clocale>
@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     std::cout << "[TestPlayback] Initializing MediaPlayer..." << std::endl;
     MediaPlayer player;
     bool initOk = player.initialize();
-    assert(initOk);
+    CHECK(initOk);
 
     // 1. Test 16:9 MP4
     std::cout << "[TestPlayback] Testing 16:9 MP4..." << std::endl;
@@ -41,24 +41,24 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(loaded);
-    assert(player.mediaInfo().hasVideo());
-    assert(player.mediaInfo().width == 640);
-    assert(player.mediaInfo().height == 360);
-    assert(std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) < 0.05);
+    CHECK(loaded);
+    CHECK(player.mediaInfo().hasVideo());
+    CHECK(player.mediaInfo().width == 640);
+    CHECK(player.mediaInfo().height == 360);
+    CHECK(std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) < 0.05);
 
     // 2. Test Seeking and Volume
     std::cout << "[TestPlayback] Testing Seeking & Volume controls..." << std::endl;
     player.setVolume(75);
-    assert(player.volume() == 75);
+    CHECK(player.volume() == 75);
 
     player.adjustVolume(-15);
-    assert(player.volume() == 60);
+    CHECK(player.volume() == 60);
 
     player.toggleMute();
-    assert(player.isMuted() == true);
+    CHECK(player.isMuted() == true);
     player.toggleMute();
-    assert(player.isMuted() == false);
+    CHECK(player.isMuted() == false);
 
     player.seekRelative(1.0);
 
@@ -70,12 +70,12 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(loaded);
-    assert(player.mediaInfo().hasVideo());
-    assert(player.mediaInfo().width == 720);
-    assert(player.mediaInfo().height == 480);
+    CHECK(loaded);
+    CHECK(player.mediaInfo().hasVideo());
+    CHECK(player.mediaInfo().width == 720);
+    CHECK(player.mediaInfo().height == 480);
     std::cout << "Detected Anamorphic DAR: " << player.mediaInfo().aspectRatio << std::endl;
-    assert(std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) < 0.1);
+    CHECK(std::abs(player.mediaInfo().aspectRatio - (16.0 / 9.0)) < 0.1);
 
     // 4. Test 9:16 Vertical Video
     std::cout << "[TestPlayback] Testing 9:16 Vertical Video..." << std::endl;
@@ -86,11 +86,11 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(loaded);
-    assert(player.mediaInfo().hasVideo());
-    assert(player.mediaInfo().width == 360);
-    assert(player.mediaInfo().height == 640);
-    assert(std::abs(player.mediaInfo().aspectRatio - (9.0 / 16.0)) < 0.05);
+    CHECK(loaded);
+    CHECK(player.mediaInfo().hasVideo());
+    CHECK(player.mediaInfo().width == 360);
+    CHECK(player.mediaInfo().height == 640);
+    CHECK(std::abs(player.mediaInfo().aspectRatio - (9.0 / 16.0)) < 0.05);
 
     // 5. Test Audio-only File (MP3)
     std::cout << "[TestPlayback] Testing Audio-only MP3..." << std::endl;
@@ -100,9 +100,9 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(loaded);
-    assert(player.mediaInfo().isAudioOnly);
-    assert(!player.mediaInfo().hasVideo());
+    CHECK(loaded);
+    CHECK(player.mediaInfo().isAudioOnly);
+    CHECK(!player.mediaInfo().hasVideo());
 
     // 6. Test Multi-Track Audio Selection
     std::cout << "[TestPlayback] Testing Multi-Track Media..." << std::endl;
@@ -112,8 +112,8 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(loaded);
-    assert(player.audioTracks().size() >= 2);
+    CHECK(loaded);
+    CHECK(player.audioTracks().size() >= 2);
     std::cout << "Found audio tracks: " << player.audioTracks().size() << std::endl;
     for (const auto& trk : player.audioTracks()) {
         std::cout << "  Track " << trk.id << ": " << trk.displayName().toStdString() << " (selected=" << trk.selected << ")" << std::endl;
@@ -129,18 +129,18 @@ int main(int argc, char* argv[]) {
     std::cout << "[TestPlayback] Testing Subtitle addition & delay..." << std::endl;
     player.addSubtitleTrack(findTestMedia(QStringLiteral("test_media/test_sub.srt")));
     player.setSubtitleDelay(0.15);
-    assert(std::abs(player.subtitleDelay() - 0.15) < 0.01);
+    CHECK(std::abs(player.subtitleDelay() - 0.15) < 0.01);
     player.adjustSubtitleDelay(-0.05);
-    assert(std::abs(player.subtitleDelay() - 0.10) < 0.01);
+    CHECK(std::abs(player.subtitleDelay() - 0.10) < 0.01);
 
     // Test Keyframe Seeking & Speed
     std::cout << "[TestPlayback] Testing Keyframe Seeking & Speed..." << std::endl;
     player.seekAbsolute(1.5, false); // keyframe seek
     player.seekAbsolute(2.0, true);  // exact seek
     player.setSpeed(2.0);
-    assert(player.speed() == 2.0);
+    CHECK(player.speed() == 2.0);
     player.setSpeed(1.0);
-    assert(player.speed() == 1.0);
+    CHECK(player.speed() == 1.0);
 
     // Test Frame Stepping
     std::cout << "[TestPlayback] Testing Frame Stepping..." << std::endl;
@@ -150,9 +150,9 @@ int main(int argc, char* argv[]) {
     // Test Stream Stats & Caching
     std::cout << "[TestPlayback] Testing Stream Stats..." << std::endl;
     auto stats = player.streamStats();
-    assert(stats.width > 0 || stats.fps >= 0.0);
+    CHECK(stats.width > 0 || stats.fps >= 0.0);
     auto stats2 = player.streamStats();
-    assert(stats2.fileFormat == stats.fileFormat);
+    CHECK(stats2.fileFormat == stats.fileFormat);
 
     // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;
@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
         QThread::msleep(20);
         app.processEvents();
     }
-    assert(errorOccurred);
+    CHECK(errorOccurred);
 
     std::cout << "[TestPlayback] All playback tests passed successfully!" << std::endl;
     return 0;

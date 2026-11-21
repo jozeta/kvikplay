@@ -1,5 +1,5 @@
 #include <QApplication>
-#include <cassert>
+#include "TestCheck.h"
 #include <iostream>
 #include "platform/PlatformIntegration.h"
 
@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[TestPlatform] Testing PlatformIntegration creation..." << std::endl;
     auto platform = PlatformIntegration::create();
-    assert(platform != nullptr);
+    CHECK(platform != nullptr);
 
     std::cout << "[TestPlatform] Testing sleep & screensaver inhibition..." << std::endl;
     platform->setDisplaySleepInhibited(true);
@@ -45,17 +45,17 @@ int main(int argc, char* argv[]) {
 
     // Verify invoking callbacks directly
     callbacks.onPlay();
-    assert(played);
+    CHECK(played);
     callbacks.onPause();
-    assert(paused);
+    CHECK(paused);
     callbacks.onTogglePlayPause();
-    assert(toggled);
+    CHECK(toggled);
     callbacks.onNextTrack();
-    assert(next);
+    CHECK(next);
     callbacks.onPreviousTrack();
-    assert(prev);
+    CHECK(prev);
     callbacks.onSeek(42.0);
-    assert(seekPos == 42.0);
+    CHECK(seekPos == 42.0);
 
     std::cout << "[TestPlatform] All platform integration tests passed successfully!" << std::endl;
     return 0;

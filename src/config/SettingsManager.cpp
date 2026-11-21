@@ -2,6 +2,7 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -19,7 +20,11 @@ SettingsManager::SettingsManager() {
 }
 
 QString SettingsManager::configFilePath() const {
-    QString configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    // KVIKPLAY_CONFIG_DIR overrides the location (tests, screenshot runs, portable use).
+    QString configDir = qEnvironmentVariable("KVIKPLAY_CONFIG_DIR");
+    if (configDir.isEmpty()) {
+        configDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+    }
     return configDir + QStringLiteral("/config.json");
 }
 
@@ -93,12 +98,28 @@ void SettingsManager::load() {
         }
     }
 
-    if (obj.contains(QStringLiteral("resumePositions")) && obj[QStringLiteral("resumePositions")].isObject()) {
+    const QJsonValue resVal = obj[QStringLiteral("resumePositions")];
+    if (resVal.isArray()) {
+        // Current format: [{"path": ..., "pos": ...}, ...], oldest first.
         m_resumePositions.clear();
-        QJsonObject resObj = obj[QStringLiteral("resumePositions")].toObject();
-        for (auto it = resObj.begin(); it != resObj.end(); ++it) {
-            m_resumePositions.insert(it.key(), it.value().toDouble(0.0));
+        for (const auto& v : resVal.toArray()) {
+            const QJsonObject e = v.toObject();
+            const QString path = e[QStringLiteral("path")].toString();
+            const double pos = e[QStringLiteral("pos")].toDouble(0.0);
+            if (!path.isEmpty() && pos > 0.0) {
+                m_resumePositions.emplace_back(path, pos);
+            }
         }
+    } else if (resVal.isObject()) {
+        // 1.0.0 format: {path: pos}. Its order was lost, so keep it as-is.
+        m_resumePositions.clear();
+        const QJsonObject resObj = resVal.toObject();
+        for (auto it = resObj.begin(); it != resObj.end(); ++it) {
+            m_resumePositions.emplace_back(it.key(), it.value().toDouble(0.0));
+        }
+    }
+    while (static_cast<int>(m_resumePositions.size()) > kMaxResumePositions) {
+        m_resumePositions.erase(m_resumePositions.begin());
     }
 
     if (obj.contains(QStringLiteral("associations")) && obj[QStringLiteral("associations")].isArray()) {
@@ -134,11 +155,11 @@ void SettingsManager::save() const {
     for (const auto& f : m_recentFiles) recArr.append(f);
     obj[QStringLiteral("recentFiles")] = recArr;
 
-    QJsonObject resObj;
-    for (auto it = m_resumePositions.begin(); it != m_resumePositions.end(); ++it) {
-        resObj.insert(it.key(), it.value());
+    QJsonArray resArr;
+    for (const auto& [path, pos] : m_resumePositions) {
+        resArr.append(QJsonObject{{QStringLiteral("path"), path}, {QStringLiteral("pos"), pos}});
     }
-    obj[QStringLiteral("resumePositions")] = resObj;
+    obj[QStringLiteral("resumePositions")] = resArr;
 
     QJsonArray arr;
     for (const auto& ext : m_associatedExtensions) {
@@ -146,11 +167,12 @@ void SettingsManager::save() const {
     }
     obj[QStringLiteral("associations")] = arr;
 
-    QFile file(path);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        QJsonDocument doc(obj);
-        file.write(doc.toJson(QJsonDocument::Compact));
-        file.close();
+    // Write to a temporary file and rename it into place, so a crash or a
+    // second instance can never leave a half-written config.json behind.
+    QSaveFile file(path);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+        file.commit();
     }
 }
 
@@ -204,23 +226,25 @@ void SettingsManager::setReverseTrackpadScrubbing(bool reverse) {
 }
 
 double SettingsManager::resumePosition(const QString& filePath) const {
-    return m_resumePositions.value(filePath, 0.0);
+    for (const auto& [path, pos] : m_resumePositions) {
+        if (path == filePath) return pos;
+    }
+    return 0.0;
 }
 
 void SettingsManager::setResumePosition(const QString& filePath, double pos) {
     if (filePath.isEmpty()) return;
+    clearResumePosition(filePath);
     if (pos > 5.0) {
-        m_resumePositions.insert(filePath, pos);
-        if (m_resumePositions.size() > 100) {
+        m_resumePositions.emplace_back(filePath, pos); // newest last
+        while (static_cast<int>(m_resumePositions.size()) > kMaxResumePositions) {
             m_resumePositions.erase(m_resumePositions.begin());
         }
-    } else {
-        m_resumePositions.remove(filePath);
     }
 }
 
 void SettingsManager::clearResumePosition(const QString& filePath) {
-    m_resumePositions.remove(filePath);
+    std::erase_if(m_resumePositions, [&](const auto& e) { return e.first == filePath; });
 }
 
 void SettingsManager::addRecentFile(const QString& filePath) {
