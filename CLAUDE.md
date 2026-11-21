@@ -52,11 +52,11 @@ README screenshots go in `docs/screenshots/`. Whenever a screenshot needs a vide
 keep **every** screenshot on that same file. When retaking one, retake any older shot that shows a
 different video too.
 
-Current shots (2026-11-21, macOS): `playback.jpg`, `menu.jpg`, `inspector.jpg` (retaken after the
-background fix) and `menu.jpg` (the redesigned menu), saved as 1280 px JPEG. `playback.jpg` and
-`inspector.jpg` are live captures of the new controls (keys only: Escape shows the controls, I the
-inspector; check the app is frontmost before every key). Still owed: a live timeline
-hover-preview shot.
+Current shots (2026-11-21, macOS, 1280 px JPEG): `playback.jpg` and `inspector.jpg` are live
+captures (keys only: Escape shows the controls, I the inspector; check the app is frontmost before
+every key); `menu.jpg` is live (right-click hold); `timeline.jpg` is the hover preview rendered by
+`test_overlay_render` over a Big Buck Bunny frame with a thumbnail from the film (synthetic mouse
+moves only reach the app now and then).
 
 How they were taken: run the app with the file above, then drive it with synthetic `CGEvent`
 mouse and key events. The window must be clicked (focused) before hovering shows the overlay.
