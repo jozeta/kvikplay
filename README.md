@@ -2,7 +2,7 @@
 
 > A fast, lightweight, frameless video and audio player for macOS and Windows.
 
-**Version 1.2.1** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
+**Version 1.2.2** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
 
 Kvikplay is for people who want a video to open instantly and then get out of the way. There is no
 title bar, toolbar or playlist: the video fills a rounded, borderless window that keeps the video's
@@ -47,6 +47,11 @@ decoding and HDR tone mapping. The interface is Qt 6.
 ---
 
 ## What's new
+
+### 1.2.2 (2026-11-21)
+
+- **Windows build:** a ready-to-run Windows zip is published with each release (see Installation).
+- Timeline thumbnails no longer look washed out.
 
 ### 1.2.1 (2026-11-21)
 
@@ -149,8 +154,9 @@ Kvikplay aims for the same features on both systems, adapted to each OS. Current
 | File associations | ✅ Launch Services; to undo, use Finder → Get Info → Open with | ✅ Per-user registry + Windows "Default apps"; unticking removes it |
 | Open-file shortcut | `Cmd+O` | `Ctrl+O` |
 
-The Windows-only code is compiled and tested by CI (MSYS2, see `.github/workflows/ci.yml`) but
-has not yet been run by hand on a Windows PC.
+Every push is built and tested on Windows by CI (MSYS2, see `.github/workflows/ci.yml`), which
+also packages the Windows zip. The Windows build is not code-signed yet, so it can't update itself:
+the update check opens the download page instead.
 
 ---
 
@@ -167,10 +173,16 @@ has not yet been run by hand on a Windows PC.
 
 ### Windows (10 or 11, 64-bit)
 
-1. Build with Visual Studio 2022 (see below). The build copies Qt, `mpv-2.dll` and the C++ runtime
-   next to `kvikplay.exe` in `build\`.
-2. Copy that whole folder wherever you like (for example `C:\Program Files\Kvikplay`) and pin
+1. Download `Kvikplay-<version>-Windows-x64.zip` from the
+   [latest release](https://github.com/jozeta/kvikplay/releases/latest) and unzip it. It contains a
+   `Kvikplay` folder with `kvikplay.exe` and everything it needs (Qt, libmpv, FFmpeg).
+2. Move the folder wherever you like (for example `%LOCALAPPDATA%\Programs\Kvikplay`) and pin
    `kvikplay.exe` to Start.
+3. The build isn't code-signed yet, so the first time Windows SmartScreen says it "protected your
+   PC": click **More info** → **Run anyway**.
+
+To build it yourself, use MSYS2 UCRT64 as CI does (`.github/workflows/ci.yml`) and package it with
+`scripts/package_windows_msys2.sh build <version>`.
 
 Kvikplay needs no installer and writes nothing outside its config file, unless you set up file
 associations.
