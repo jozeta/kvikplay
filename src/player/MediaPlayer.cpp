@@ -33,8 +33,11 @@ MediaPlayer::MediaPlayer(QObject* parent)
     connect(m_controller.get(), &MpvController::chapterChanged, this, &MediaPlayer::chapterChanged);
 }
 
-bool MediaPlayer::initialize() {
-    if (!m_controller->initialize()) {
+bool MediaPlayer::initialize(VideoOutput output) {
+    // Exactly "libmpv", never a list like "libmpv,null": mpv probes list entries, and
+    // outside macOS vo_libmpv refuses to be probed (mpv video/out/vo_libmpv.c preinit), so
+    // mpv silently fell back to "null" on Windows: sound but a black window (1.0.0-1.2.2).
+    if (!m_controller->initialize(output == VideoOutput::Window ? "libmpv" : "null")) {
         return false;
     }
 

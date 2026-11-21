@@ -314,6 +314,11 @@ Settings are changed in the app (menu toggles, volume, window size) and saved to
 | `resumePositions` | `[]` | Closing or switching files | `{path, pos}` list, the 100 most recently saved files |
 | `associations` | `[]` | File Associations dialog | Extensions you chose to associate |
 
+**Troubleshooting:** Kvikplay keeps a small local log, `kvikplay.log`, in the same folder
+(replaced at every start, at most 1 MB, never sent anywhere). The media inspector (`I`) shows its
+path and the lines "Video Output" and "Renderer", which tell whether the picture reaches the
+window.
+
 Quit Kvikplay before editing the file by hand; invalid values fall back to the defaults. Delete the
 file to reset everything. The file is written atomically, so a crash can't leave it half-written.
 

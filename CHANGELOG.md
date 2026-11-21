@@ -4,6 +4,20 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+### Fixed
+- **Windows: black picture with sound.** Kvikplay asked mpv for the video output list
+  `libmpv,null`; mpv probes list entries, and outside macOS its `libmpv` output refuses to be
+  probed, so it silently used `null`. It now asks for exactly `libmpv` (regression test in
+  `test_playback`). This affected every Windows build so far.
+
+### Added
+- Diagnostics log `kvikplay.log` next to `config.json`: mpv's warnings and video-path messages,
+  Qt warnings and Kvikplay's own steps, replaced at every start, capped at 1 MB, never sent
+  anywhere. The media inspector shows its path.
+- Media inspector: "Video Output" (what mpv draws with) and "Renderer" (OpenGL version and GPU,
+  and whether mpv attached to it).
+- Tests: the bundled libmpv must support the OpenGL render API; the diagnostics log.
+
 ## 1.2.2 — 2026-11-21
 
 ### Fixed

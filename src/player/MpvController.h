@@ -19,7 +19,8 @@ public:
     explicit MpvController(QObject* parent = nullptr);
     ~MpvController() override;
 
-    bool initialize();
+    // videoOutput: mpv's "vo" value, "libmpv" for the window (see initialize()).
+    bool initialize(const char* videoOutput = "libmpv");
 
     mpv_handle* handle() const { return m_mpv; }
 

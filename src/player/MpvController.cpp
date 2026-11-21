@@ -35,7 +35,7 @@ MpvController::~MpvController() {
     }
 }
 
-bool MpvController::initialize() {
+bool MpvController::initialize(const char* videoOutput) {
     if (m_mpv) {
         return true;
     }
@@ -51,7 +51,7 @@ bool MpvController::initialize() {
 
     // Configure options before mpv_initialize
     applyBaseMpvOptions(m_mpv);
-    mpv_set_option_string(m_mpv, "vo", "libmpv,null");
+    mpv_set_option_string(m_mpv, "vo", videoOutput);
     mpv_set_option_string(m_mpv, "keep-open", "yes");
     mpv_set_option_string(m_mpv, "idle", "yes");
     mpv_set_option_string(m_mpv, "msg-level", "all=warn");

@@ -16,7 +16,10 @@ public:
     explicit MediaPlayer(QObject* parent = nullptr);
     ~MediaPlayer() override = default;
 
-    bool initialize();
+    // Window: video goes to the window through the render API (the app). Headless: no
+    // video output at all (tests, tools).
+    enum class VideoOutput { Window, Headless };
+    bool initialize(VideoOutput output = VideoOutput::Window);
 
     MpvController* controller() { return m_controller.get(); }
     const MpvController* controller() const { return m_controller.get(); }

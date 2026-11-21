@@ -43,8 +43,20 @@ int main(int argc, char* argv[]) {
     using namespace kvikplay;
 
     std::cout << "[TestPlayback] Initializing MediaPlayer..." << std::endl;
+    // Regression (1.0.0-1.2.2 on Windows): the app must ask mpv for exactly "libmpv". A list
+    // such as "libmpv,null" makes mpv probe it, and outside macOS vo_libmpv refuses probing
+    // (mpv video/out/vo_libmpv.c preinit), so mpv fell back to "null": sound, black window.
+    {
+        MediaPlayer appPlayer;
+        CHECK(appPlayer.initialize());
+        const QString vo = mpvOption(appPlayer, "vo");
+        std::cout << "  app video output option: " << vo.toStdString() << std::endl;
+        CHECK(vo == QStringLiteral("libmpv"));
+    }
+
+    // No window in this test: decode without a video output.
     MediaPlayer player;
-    bool initOk = player.initialize();
+    bool initOk = player.initialize(MediaPlayer::VideoOutput::Headless);
     CHECK(initOk);
 
     // 1. Test 16:9 MP4
