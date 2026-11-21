@@ -108,6 +108,7 @@ private:
     void updateNowPlayingMetadata();
     void openFileDialog();
     MenuState buildMenuState();
+    StreamStats inspectorStats() const;
     void showContextMenu(const QPoint& globalPos);
     void showSubtitleMenu(const QPoint& buttonGlobalPos);
 

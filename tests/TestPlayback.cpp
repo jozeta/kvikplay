@@ -173,6 +173,9 @@ int main(int argc, char* argv[]) {
     CHECK(stats.width > 0 || stats.fps >= 0.0);
     auto stats2 = player.streamStats();
     CHECK(stats2.fileFormat == stats.fileFormat);
+    // Diagnostics: which video output mpv really uses. No window here, so "null".
+    std::cout << "  video output: " << stats.videoOutput.toStdString() << std::endl;
+    CHECK(stats.videoOutput == QStringLiteral("null"));
 
     // 7. Test Corrupt File Error Handling
     std::cout << "[TestPlayback] Testing Corrupt File Handling..." << std::endl;

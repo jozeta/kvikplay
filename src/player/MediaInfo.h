@@ -50,6 +50,10 @@ struct StreamStats {
     int audioChannels{0};
     int audioSampleRate{0};
     double audioBitrate{0.0}; // in kbps
+    // Diagnostics: mpv's actual video output ("libmpv" = drawing in the window, "null" =
+    // nowhere) and the OpenGL renderer the window got (filled in by the window).
+    QString videoOutput;
+    QString renderer;
 };
 
 struct MediaInfo {

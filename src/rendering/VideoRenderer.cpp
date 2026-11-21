@@ -3,6 +3,7 @@
 #include <QLinearGradient>
 #include <QSvgRenderer>
 #include <QDebug>
+#include <QOpenGLFunctions>
 
 namespace kvikplay {
 
@@ -72,8 +73,26 @@ void VideoRenderer::initializeGL() {
         {MPV_RENDER_PARAM_INVALID, nullptr}
     };
 
-    if (mpv_render_context_create(&m_mpv_gl, m_mpv, params) < 0) {
-        qWarning() << "Failed to initialize mpv OpenGL render context";
+    QString gl;
+    if (QOpenGLContext* ctx = QOpenGLContext::currentContext()) {
+        QOpenGLFunctions* f = ctx->functions();
+        auto str = [f](GLenum e) {
+            const auto* s = reinterpret_cast<const char*>(f->glGetString(e));
+            return s ? QString::fromLatin1(s) : QStringLiteral("?");
+        };
+        const QSurfaceFormat fmt = ctx->format();
+        gl = QStringLiteral("OpenGL %1.%2%3 · %4 · %5")
+                 .arg(fmt.majorVersion()).arg(fmt.minorVersion())
+                 .arg(fmt.profile() == QSurfaceFormat::CoreProfile ? QStringLiteral(" core") : QString())
+                 .arg(str(GL_RENDERER), str(GL_VERSION));
+    } else {
+        gl = QStringLiteral("no OpenGL context");
+    }
+
+    const int rc = mpv_render_context_create(&m_mpv_gl, m_mpv, params);
+    if (rc < 0) {
+        qWarning() << "Failed to initialize mpv OpenGL render context:" << mpv_error_string(rc);
+        m_diagnostics = gl + QStringLiteral(" · mpv render: FAILED (%1)").arg(QString::fromUtf8(mpv_error_string(rc)));
         m_setupDone = true;
         emit renderSetupFinished(false); // still play: audio works without it
         return;
@@ -82,6 +101,7 @@ void VideoRenderer::initializeGL() {
     mpv_render_context_set_update_callback(m_mpv_gl, onRenderUpdateStatic, this);
     m_initialized = true;
     m_setupDone = true;
+    m_diagnostics = gl + QStringLiteral(" · mpv render: ok");
     emit renderSetupFinished(true);
 }
 

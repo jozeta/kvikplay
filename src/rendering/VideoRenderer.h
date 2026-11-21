@@ -23,6 +23,8 @@ public:
     // loaded before then: mpv's "libmpv" video output needs the render context, and
     // without it mpv silently falls back to the "null" output (no picture).
     bool isRenderSetupDone() const { return m_setupDone; }
+    // "OpenGL 4.6 · NVIDIA GeForce … · mpv render: ok" (or mpv's error): for the inspector.
+    QString diagnostics() const { return m_diagnostics; }
 
 signals:
     void renderSetupFinished(bool ok);
@@ -46,6 +48,7 @@ private:
     MediaInfo m_mediaInfo;
     bool m_initialized{false};
     bool m_setupDone{false};
+    QString m_diagnostics{QStringLiteral("not set up yet")};
     std::atomic<bool> m_renderUpdatePending{false};
 };
 

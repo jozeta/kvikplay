@@ -724,6 +724,13 @@ StreamStats MpvController::streamStats() const {
         stats.dropCount = static_cast<int>(drops);
     }
 
+    if (char* vo = mpv_get_property_string(m_mpv, "current-vo")) {
+        stats.videoOutput = QString::fromUtf8(vo);
+        mpv_free(vo);
+    } else {
+        stats.videoOutput = QStringLiteral("none");
+    }
+
     double abitrate = 0.0;
     if (mpv_get_property(m_mpv, "audio-bitrate", MPV_FORMAT_DOUBLE, &abitrate) >= 0) {
         stats.audioBitrate = abitrate / 1000.0; // kbps

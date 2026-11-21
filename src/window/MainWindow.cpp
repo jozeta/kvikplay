@@ -213,7 +213,7 @@ MainWindow::MainWindow(QWidget* parent)
     m_inspectorTimer->setInterval(500);
     connect(m_inspectorTimer, &QTimer::timeout, this, [this]() {
         if (m_inspector && m_inspector->isVisible()) {
-            m_inspector->updateStats(m_player->streamStats());
+            m_inspector->updateStats(inspectorStats());
         }
     });
 }
@@ -641,7 +641,7 @@ void MainWindow::toggleMediaInspector() {
     if (m_inspector->isVisible()) {
         // Below the title block, on the overlay's left margin.
         m_inspector->move(width() < 600 ? 16 : 28, 84);
-        m_inspector->updateStats(m_player->streamStats());
+        m_inspector->updateStats(inspectorStats());
         m_inspectorTimer->start();
     } else {
         m_inspectorTimer->stop();
@@ -782,6 +782,12 @@ void MainWindow::fitAndPositionWindow(const QSize& targetSize, const QPoint& pre
     resize(w, h);
     move(targetX, targetY);
     m_normalGeometry = geometry();
+}
+
+StreamStats MainWindow::inspectorStats() const {
+    StreamStats stats = m_player->streamStats();
+    stats.renderer = m_renderer ? m_renderer->diagnostics() : QStringLiteral("-");
+    return stats;
 }
 
 MenuState MainWindow::buildMenuState() {
