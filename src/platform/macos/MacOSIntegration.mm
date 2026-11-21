@@ -12,11 +12,45 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #import <MediaPlayer/MediaPlayer.h>
 
+// Receives mouse movement from an NSTrackingArea that is active even while another
+// app is in front (Qt's own tracking only reports it for the active app).
+@interface KvikplayHoverTarget : NSObject {
+@public
+    std::function<void()> onHover;
+}
+@end
+
+@implementation KvikplayHoverTarget
+- (void)mouseMoved:(NSEvent*)event {
+    (void)event;
+    if (![NSApp isActive] && onHover) onHover(); // Qt handles it when we are active
+}
+- (void)mouseEntered:(NSEvent*)event {
+    [self mouseMoved:event];
+}
+@end
+
 namespace kvikplay {
 
 MacOSIntegration::MacOSIntegration() = default;
 
 MacOSIntegration::~MacOSIntegration() {
+    if (m_activationObserver) {
+        id token = (id)m_activationObserver;
+        [[NSNotificationCenter defaultCenter] removeObserver:token];
+        [token release];
+        m_activationObserver = nullptr;
+    }
+    if (m_hoverArea) {
+        NSTrackingArea* area = (NSTrackingArea*)m_hoverArea;
+        if (m_hoverView) [(NSView*)m_hoverView removeTrackingArea:area];
+        [area release];
+        m_hoverArea = nullptr;
+    }
+    if (m_hoverTarget) {
+        [(KvikplayHoverTarget*)m_hoverTarget release];
+        m_hoverTarget = nullptr;
+    }
     if (m_sleepAssertionId != 0) {
         IOPMAssertionRelease(m_sleepAssertionId);
         m_sleepAssertionId = 0;
@@ -161,7 +195,14 @@ void MacOSIntegration::installActivationObserver(QWidget* widget, std::function<
     NSWindow* window = [view window];
     if (!window) return;
 
-    [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification
+    // Replace any earlier observer; the token is removed again in the destructor, so a
+    // late notification can never call into a destroyed MainWindow.
+    if (m_activationObserver) {
+        id old = (id)m_activationObserver;
+        [[NSNotificationCenter defaultCenter] removeObserver:old];
+        [old release];
+    }
+    id token = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowDidBecomeKeyNotification
                                                       object:window
                                                        queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(NSNotification* /*note*/) {
@@ -170,6 +211,35 @@ void MacOSIntegration::installActivationObserver(QWidget* widget, std::function<
             callback(byMouse);
         }
     }];
+    m_activationObserver = (void*)[token retain];
+}
+
+void MacOSIntegration::setAlwaysOnTop(QWidget* widget, bool top) {
+    if (!widget) return;
+    NSView* view = (__bridge NSView*)(void*)widget->winId();
+    NSWindow* window = view ? [view window] : nil;
+    if (!window) return;
+    // Changes the level of the existing window; nothing is recreated.
+    window.level = top ? NSFloatingWindowLevel : NSNormalWindowLevel;
+}
+
+void MacOSIntegration::installHoverObserver(QWidget* widget, std::function<void()> onHover) {
+    if (!widget || m_hoverArea) return;
+    NSView* view = (__bridge NSView*)(void*)widget->winId();
+    if (!view) return;
+
+    KvikplayHoverTarget* target = [[KvikplayHoverTarget alloc] init];
+    target->onHover = std::move(onHover);
+    NSTrackingArea* area = [[NSTrackingArea alloc]
+        initWithRect:NSZeroRect
+             options:(NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited |
+                      NSTrackingActiveAlways | NSTrackingInVisibleRect)
+               owner:target
+            userInfo:nil];
+    [view addTrackingArea:area];
+    m_hoverTarget = (void*)target;
+    m_hoverArea = (void*)area;
+    m_hoverView = (void*)view;
 }
 
 void MacOSIntegration::setDisplaySleepInhibited(bool inhibit) {

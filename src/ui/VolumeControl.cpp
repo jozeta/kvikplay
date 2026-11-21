@@ -13,8 +13,6 @@ VolumeControl::VolumeControl(QWidget* parent)
     , m_sliderContainer(new QWidget(this))
     , m_slider(new QSlider(Qt::Vertical, m_sliderContainer))
     , m_percentLabel(new QLabel(QStringLiteral("100%"), m_sliderContainer))
-    , m_sliderOpacity(new QGraphicsOpacityEffect(m_sliderContainer))
-    , m_sliderAnim(new QPropertyAnimation(m_sliderOpacity, "opacity", this))
     , m_sliderHideTimer(new QTimer(this)) {
 
     setFixedSize(46, 190);
@@ -38,13 +36,15 @@ VolumeControl::VolumeControl(QWidget* parent)
     ));
     m_iconButton->setIconSize(QSize(20, 20));
     m_iconButton->move(4, 146);
+    m_iconButton->setAccessibleName(QStringLiteral("Mute"));
+    m_iconButton->setToolTip(QStringLiteral("Mute (M)"));
     connect(m_iconButton, &QPushButton::clicked, this, &VolumeControl::muteToggled);
 
     // Setup vertical slider container
     m_sliderContainer->setFixedSize(42, 140);
     m_sliderContainer->move(2, 2);
-    m_sliderContainer->setGraphicsEffect(m_sliderOpacity);
-    m_sliderOpacity->setOpacity(0.0);
+    // Shown and hidden directly: a fade effect here would be nested inside the
+    // overlay's own fade effect, which Qt cannot paint.
     m_sliderContainer->hide();
 
     auto* sliderLayout = new QVBoxLayout(m_sliderContainer);
@@ -52,10 +52,12 @@ VolumeControl::VolumeControl(QWidget* parent)
     sliderLayout->setSpacing(4);
 
     m_percentLabel->setAlignment(Qt::AlignCenter);
+    m_percentLabel->setTextFormat(Qt::PlainText);
     m_percentLabel->setStyleSheet(QStringLiteral("color: #121316; font-size: 11px; font-weight: bold;"));
     sliderLayout->addWidget(m_percentLabel);
 
     m_slider->setRange(0, 100);
+    m_slider->setAccessibleName(QStringLiteral("Volume"));
     m_slider->setValue(m_volume);
     m_slider->setCursor(Qt::PointingHandCursor);
     m_slider->setFocusPolicy(Qt::NoFocus);
@@ -93,12 +95,6 @@ VolumeControl::VolumeControl(QWidget* parent)
         emit volumeChanged(val);
     });
 
-    m_sliderAnim->setDuration(150);
-    connect(m_sliderAnim, &QPropertyAnimation::finished, this, [this]() {
-        if (m_sliderOpacity->opacity() <= 0.05) {
-            m_sliderContainer->hide();
-        }
-    });
     m_sliderHideTimer->setSingleShot(true);
     connect(m_sliderHideTimer, &QTimer::timeout, this, &VolumeControl::hideSlider);
 
@@ -120,11 +116,12 @@ void VolumeControl::setMuted(bool muted) {
 }
 
 void VolumeControl::updateIcon() {
-    if (m_isMuted || m_volume == 0) {
-        m_iconButton->setIcon(QIcon(QStringLiteral(":/icons/volume_mute.svg")));
-    } else {
-        m_iconButton->setIcon(QIcon(QStringLiteral(":/icons/volume_high.svg")));
-    }
+    // Parsed once, not on every volume step.
+    static const QIcon muteIcon(QStringLiteral(":/icons/volume_mute.svg"));
+    static const QIcon highIcon(QStringLiteral(":/icons/volume_high.svg"));
+    const bool silent = m_isMuted || m_volume == 0;
+    m_iconButton->setIcon(silent ? muteIcon : highIcon);
+    m_iconButton->setAccessibleName(m_isMuted ? QStringLiteral("Unmute") : QStringLiteral("Mute"));
 }
 
 void VolumeControl::enterEvent(QEnterEvent* /*event*/) {
@@ -138,17 +135,12 @@ void VolumeControl::leaveEvent(QEvent* /*event*/) {
 
 void VolumeControl::showSlider() {
     m_sliderContainer->show();
-    m_sliderAnim->stop();
-    m_sliderAnim->setStartValue(m_sliderOpacity->opacity());
-    m_sliderAnim->setEndValue(1.0);
-    m_sliderAnim->start();
+    update(); // the rounded background is painted by this widget
 }
 
 void VolumeControl::hideSlider() {
-    m_sliderAnim->stop();
-    m_sliderAnim->setStartValue(m_sliderOpacity->opacity());
-    m_sliderAnim->setEndValue(0.0);
-    m_sliderAnim->start();
+    m_sliderContainer->hide();
+    update();
 }
 
 void VolumeControl::paintEvent(QPaintEvent* /*event*/) {

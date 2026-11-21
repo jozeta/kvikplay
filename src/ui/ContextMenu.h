@@ -2,6 +2,7 @@
 
 #include <QMenu>
 #include <QAction>
+#include <QActionGroup>
 #include <vector>
 #include "player/MediaInfo.h"
 
@@ -18,6 +19,8 @@ public:
     void setFullscreen(bool fullscreen);
     void setReverseTrackpad(bool reversed);
     void setDialogueBoost(bool enabled);
+    void setExternalOpenNewWindow(bool newWindow);
+    void setStartInFullscreen(bool on);
     void setRecentFiles(const QStringList& files);
     void setTracks(const std::vector<TrackInfo>& audio,
                    const std::vector<TrackInfo>& video,
@@ -31,6 +34,8 @@ signals:
     void fullscreenToggled();
     void reverseTrackpadToggled(bool reversed);
     void dialogueBoostToggled(bool enabled);
+    void externalOpenNewWindowToggled(bool newWindow);
+    void startInFullscreenToggled(bool on);
     void recentFileSelected(const QString& filePath);
     void clearRecentTriggered();
     void screenshotTriggered();
@@ -63,6 +68,15 @@ private:
     QAction* m_helpAction{nullptr};
     QAction* m_aboutAction{nullptr};
     QAction* m_closeAction{nullptr};
+    QAction* m_externalReplaceAction{nullptr};
+    QAction* m_externalNewWindowAction{nullptr};
+    QAction* m_startFullscreenAction{nullptr};
+
+    // One group per track menu for the menu's lifetime (a new group per track-list
+    // change leaked). Deleted actions leave their group automatically.
+    QActionGroup* m_audioGroup{nullptr};
+    QActionGroup* m_videoGroup{nullptr};
+    QActionGroup* m_subtitleGroup{nullptr};
 };
 
 } // namespace kvikplay

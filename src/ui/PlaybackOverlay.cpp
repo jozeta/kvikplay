@@ -168,7 +168,8 @@ PlaybackOverlay::PlaybackOverlay(QWidget* parent)
     , m_osdNotification(new OsdNotification(this))
     , m_previewCard(new TimelinePreviewCard(this))
     , m_opacityEffect(new QGraphicsOpacityEffect(this))
-    , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this)) {
+    , m_fadeAnimation(new QPropertyAnimation(m_opacityEffect, "opacity", this))
+    , m_fwdHoldTimer(new QTimer(this)) {
 
     setAttribute(Qt::WA_NoSystemBackground);
     setMouseTracking(true);
@@ -214,6 +215,7 @@ void PlaybackOverlay::setupUi() {
         "border-radius: 4px;"
         "padding: 3px 8px;"
     ));
+    m_filenameLabel->setTextFormat(Qt::PlainText); // file names are untrusted: never HTML
     m_filenameLabel->setText(QStringLiteral("No media"));
     m_filenameLabel->adjustSize();
 
@@ -224,6 +226,8 @@ void PlaybackOverlay::setupUi() {
     m_closeButton->setIcon(QIcon(QStringLiteral(":/icons/close.svg")));
     m_closeButton->setIconSize(QSize(16, 16));
     m_closeButton->setStyleSheet(buttonStyle.arg(17));
+    m_closeButton->setAccessibleName(QStringLiteral("Close"));
+    m_closeButton->setToolTip(QStringLiteral("Close (Q)"));
     connect(m_closeButton, &QPushButton::clicked, this, &PlaybackOverlay::closeClicked);
 
     // 3. Timeline row (timeline slider + time display on right)
@@ -246,7 +250,9 @@ void PlaybackOverlay::setupUi() {
         "  color: rgba(255, 255, 255, 0.75);"
         "}"
     ));
+    m_timeLabel->setAccessibleName(QStringLiteral("Elapsed time; click to show remaining time"));
     connect(m_timeLabel, &QPushButton::clicked, this, &PlaybackOverlay::toggleTimeMode);
+    m_timelineSlider->setAccessibleName(QStringLiteral("Timeline"));
 
     timelineLayout->addWidget(m_timelineSlider, 1);
     timelineLayout->addWidget(m_timeLabel, 0, Qt::AlignVCenter);
@@ -271,6 +277,8 @@ void PlaybackOverlay::setupUi() {
     m_seekBackBtn->setIcon(QIcon(QStringLiteral(":/icons/seek_backward.svg")));
     m_seekBackBtn->setIconSize(QSize(20, 20));
     m_seekBackBtn->setStyleSheet(buttonStyle.arg(20));
+    m_seekBackBtn->setAccessibleName(QStringLiteral("Back 10 seconds"));
+    m_seekBackBtn->setToolTip(QStringLiteral("Back 10 s (←)"));
     connect(m_seekBackBtn, &QPushButton::clicked, this, &PlaybackOverlay::seekBackwardClicked);
 
     m_playPauseBtn->setFixedSize(52, 52);
@@ -279,6 +287,8 @@ void PlaybackOverlay::setupUi() {
     m_playPauseBtn->setIcon(QIcon(QStringLiteral(":/icons/play.svg")));
     m_playPauseBtn->setIconSize(QSize(26, 26));
     m_playPauseBtn->setStyleSheet(buttonStyle.arg(26));
+    m_playPauseBtn->setAccessibleName(QStringLiteral("Play"));
+    m_playPauseBtn->setToolTip(QStringLiteral("Play / Pause (Space)"));
     connect(m_playPauseBtn, &QPushButton::clicked, this, &PlaybackOverlay::playPauseClicked);
 
     m_seekFwdBtn->setFixedSize(40, 40);
@@ -287,12 +297,28 @@ void PlaybackOverlay::setupUi() {
     m_seekFwdBtn->setIcon(QIcon(QStringLiteral(":/icons/seek_forward.svg")));
     m_seekFwdBtn->setIconSize(QSize(20, 20));
     m_seekFwdBtn->setStyleSheet(buttonStyle.arg(20));
-    connect(m_seekFwdBtn, &QPushButton::clicked, this, &PlaybackOverlay::seekForwardClicked);
-    connect(m_seekFwdBtn, &QPushButton::pressed, this, [this]() {
+    m_seekFwdBtn->setAccessibleName(QStringLiteral("Forward 10 seconds; hold for double speed"));
+    m_seekFwdBtn->setToolTip(QStringLiteral("Forward 10 s (→) · hold for 2× speed"));
+    // A tap seeks; only a hold (350 ms) starts the 2x boost. Before, every tap also
+    // flashed "Speed 2.0x" / "Speed 1.0x" and then seeked.
+    m_fwdHoldTimer->setSingleShot(true);
+    m_fwdHoldTimer->setInterval(350);
+    connect(m_fwdHoldTimer, &QTimer::timeout, this, [this]() {
+        m_fwdBoosting = true;
         emit speedBoostRequested(true);
     });
+    connect(m_seekFwdBtn, &QPushButton::pressed, this, [this]() {
+        m_fwdBoosting = false;
+        m_fwdHoldTimer->start();
+    });
     connect(m_seekFwdBtn, &QPushButton::released, this, [this]() {
-        emit speedBoostRequested(false);
+        if (m_fwdHoldTimer->isActive()) {
+            m_fwdHoldTimer->stop();
+            emit seekForwardClicked();
+        } else if (m_fwdBoosting) {
+            m_fwdBoosting = false;
+            emit speedBoostRequested(false);
+        }
     });
 
     centerLayout->addWidget(m_seekBackBtn);
@@ -387,12 +413,13 @@ void PlaybackOverlay::updateTimeLabel() {
 }
 
 void PlaybackOverlay::setPlaying(bool playing) {
+    if (playing == m_isPlaying && !m_playPauseBtn->icon().isNull()) return;
     m_isPlaying = playing;
-    if (m_isPlaying) {
-        m_playPauseBtn->setIcon(QIcon(QStringLiteral(":/icons/pause.svg")));
-    } else {
-        m_playPauseBtn->setIcon(QIcon(QStringLiteral(":/icons/play.svg")));
-    }
+    // Parsed once, not on every state change.
+    static const QIcon pauseIcon(QStringLiteral(":/icons/pause.svg"));
+    static const QIcon playIcon(QStringLiteral(":/icons/play.svg"));
+    m_playPauseBtn->setIcon(m_isPlaying ? pauseIcon : playIcon);
+    m_playPauseBtn->setAccessibleName(m_isPlaying ? QStringLiteral("Pause") : QStringLiteral("Play"));
 }
 
 void PlaybackOverlay::setVolume(int percent) {

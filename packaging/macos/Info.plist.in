@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>kvikplay</string>
     <key>CFBundleGetInfoString</key>
-    <string>Kvikplay 1.0.0, Fast Minimalist Media Player</string>
+    <string>Kvikplay ${MACOSX_BUNDLE_SHORT_VERSION_STRING}, Fast Minimalist Media Player</string>
     <key>CFBundleIconFile</key>
     <string>@MACOSX_BUNDLE_ICON_FILE@</string>
     <key>CFBundleIdentifier</key>
@@ -17,11 +17,11 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
     <key>CFBundleSignature</key>
     <string>????</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>NSHighResolutionCapable</key>

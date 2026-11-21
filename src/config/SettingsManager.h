@@ -52,11 +52,17 @@ public:
     // Recent files (max 8)
     QStringList recentFiles() const { return m_recentFiles; }
     void addRecentFile(const QString& filePath);
+    void removeRecentFile(const QString& filePath);
     void clearRecentFiles();
 
     // Dialogue Boost (Dynamic Audio Normalizer)
     bool dialogueBoost() const { return m_dialogueBoost; }
     void setDialogueBoost(bool boost);
+
+    // Opening a file from Finder / Explorer while a video plays: replace it (default)
+    // or open a separate player window. Drag-and-drop and Open File always replace.
+    bool externalOpenInNewWindow() const { return m_externalOpenInNewWindow; }
+    void setExternalOpenInNewWindow(bool newWindow) { m_externalOpenInNewWindow = newWindow; }
 
     QStringList associatedExtensions() const { return m_associatedExtensions; }
     void setAssociatedExtensions(const QStringList& extensions);
@@ -83,6 +89,7 @@ private:
     bool m_startInFullscreen{false};
     bool m_reverseTrackpadScrubbing{false};
     bool m_dialogueBoost{false};
+    bool m_externalOpenInNewWindow{false};
     QStringList m_recentFiles;
     // Oldest first; capped at kMaxResumePositions (least recently saved is dropped).
     std::vector<std::pair<QString, double>> m_resumePositions;

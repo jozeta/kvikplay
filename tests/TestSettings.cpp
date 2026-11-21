@@ -21,6 +21,24 @@ int main(int argc, char* argv[]) {
     settings.save();
     CHECK(QFileInfo::exists(tmp.path() + QStringLiteral("/config.json")));
 
+    // New: what opening a file from Finder/Explorer does. Default: replace.
+    std::cout << "[TestSettings] Checking external-open mode..." << std::endl;
+    CHECK(settings.externalOpenInNewWindow() == false);
+    settings.setExternalOpenInNewWindow(true);
+    settings.save();
+    settings.setExternalOpenInNewWindow(false);
+    settings.load();
+    CHECK(settings.externalOpenInNewWindow() == true);
+    settings.setExternalOpenInNewWindow(false);
+
+    // Item 11: a recent file that no longer exists can be dropped from the list.
+    settings.clearRecentFiles();
+    settings.addRecentFile(QStringLiteral("/a/one.mkv"));
+    settings.addRecentFile(QStringLiteral("/a/two.mkv"));
+    settings.removeRecentFile(QStringLiteral("/a/one.mkv"));
+    CHECK(settings.recentFiles() == QStringList{QStringLiteral("/a/two.mkv")});
+    settings.clearRecentFiles();
+
     // Item 10: resume positions are evicted oldest-first, not alphabetically.
     std::cout << "[TestSettings] Checking resume-position eviction order..." << std::endl;
     settings.setResumePosition(QStringLiteral("/z/oldest.mkv"), 42.0);

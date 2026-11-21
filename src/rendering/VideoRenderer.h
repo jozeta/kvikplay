@@ -19,6 +19,13 @@ public:
     void setMpvHandle(mpv_handle* mpv);
     void setMediaInfo(const MediaInfo& info);
     bool hasVideo() const { return m_hasVideo; }
+    // True once initializeGL() has run (successfully or not). Files must not be
+    // loaded before then: mpv's "libmpv" video output needs the render context, and
+    // without it mpv silently falls back to the "null" output (no picture).
+    bool isRenderSetupDone() const { return m_setupDone; }
+
+signals:
+    void renderSetupFinished(bool ok);
 
 public slots:
     void requestRenderUpdate();
@@ -38,6 +45,7 @@ private:
     bool m_hasVideo{false};
     MediaInfo m_mediaInfo;
     bool m_initialized{false};
+    bool m_setupDone{false};
     std::atomic<bool> m_renderUpdatePending{false};
 };
 

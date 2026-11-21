@@ -1,5 +1,6 @@
 #include "MediaInspectorOverlay.h"
 #include <QVBoxLayout>
+#include <QFontDatabase>
 
 namespace kvikplay {
 
@@ -8,6 +9,12 @@ MediaInspectorOverlay::MediaInspectorOverlay(QWidget* parent)
     , m_statsLabel(new QLabel(this)) {
 
     setAttribute(Qt::WA_TransparentForMouseEvents);
+    // Without this a plain QWidget ignores its own stylesheet background, so the
+    // panel was transparent and its text unreadable over bright video.
+    setAttribute(Qt::WA_StyledBackground, true);
+    // The platform's real monospace family; "ui-monospace" does not exist in Qt and
+    // cost a 32 ms font-alias scan at startup.
+    const QString mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
     setStyleSheet(QStringLiteral(
         "kvikplay--MediaInspectorOverlay {"
         "  background-color: rgba(16, 18, 22, 0.90);"
@@ -16,12 +23,13 @@ MediaInspectorOverlay::MediaInspectorOverlay(QWidget* parent)
         "}"
         "QLabel {"
         "  color: #d2d6e0;"
-        "  font-family: ui-monospace, Menlo, Consolas, Monaco, monospace;"
+        "  font-family: '%1';"
         "  font-size: 11px;"
-        "  line-height: 1.4;"
         "  background: transparent;"
         "}"
-    ));
+    ).arg(mono));
+    m_statsLabel->setTextFormat(Qt::RichText); // our table; every value is escaped below
+    setAccessibleName(QStringLiteral("Media inspector"));
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(12, 10, 12, 10);
@@ -31,7 +39,7 @@ MediaInspectorOverlay::MediaInspectorOverlay(QWidget* parent)
 }
 
 void MediaInspectorOverlay::updateStats(const StreamStats& stats) {
-    QString html = QStringLiteral("<table cellpadding='2' cellspacing='0' style='font-family: ui-monospace, Menlo, Consolas, Monaco, monospace; font-size: 11px;'>");
+    QString html = QStringLiteral("<table cellpadding='2' cellspacing='0' style='font-size: 11px;'>");
 
     auto addRow = [&](const QString& label, const QString& val) {
         html += QStringLiteral(
@@ -39,7 +47,7 @@ void MediaInspectorOverlay::updateStats(const StreamStats& stats) {
             "  <td style='color: #8b92a2; font-weight: 600; padding-right: 14px;'>%1:</td>"
             "  <td style='color: #ffffff;'>%2</td>"
             "</tr>"
-        ).arg(label, val);
+        ).arg(label.toHtmlEscaped(), val.toHtmlEscaped()); // values come from the media file
     };
 
     addRow(QStringLiteral("Format"), stats.fileFormat.isEmpty() ? QStringLiteral("-") : stats.fileFormat);

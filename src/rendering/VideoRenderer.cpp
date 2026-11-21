@@ -74,11 +74,15 @@ void VideoRenderer::initializeGL() {
 
     if (mpv_render_context_create(&m_mpv_gl, m_mpv, params) < 0) {
         qWarning() << "Failed to initialize mpv OpenGL render context";
+        m_setupDone = true;
+        emit renderSetupFinished(false); // still play: audio works without it
         return;
     }
 
     mpv_render_context_set_update_callback(m_mpv_gl, onRenderUpdateStatic, this);
     m_initialized = true;
+    m_setupDone = true;
+    emit renderSetupFinished(true);
 }
 
 void VideoRenderer::resizeGL(int w, int h) {
@@ -125,8 +129,8 @@ void VideoRenderer::drawPlaceholder(QPainter& painter) {
     painter.fillRect(rect(), bgGrad);
 
     if (m_mediaInfo.isAudioOnly) {
-        // Draw elegant audio visualization disc
-        QSvgRenderer discRenderer(QStringLiteral(":/icons/audio_disc.svg"));
+        // Draw elegant audio visualization disc (parsed once)
+        static QSvgRenderer discRenderer(QStringLiteral(":/icons/audio_disc.svg"));
         int discSize = std::min(width(), height()) / 3;
         discSize = std::clamp(discSize, 64, 160);
         QRect discRect(width() / 2 - discSize / 2, height() / 2 - discSize / 2 - 20, discSize, discSize);
@@ -146,7 +150,7 @@ void VideoRenderer::drawPlaceholder(QPainter& painter) {
         painter.drawText(textRect, Qt::AlignCenter | Qt::TextSingleLine, title);
     } else {
         // Neutral idle state
-        QSvgRenderer appIcon(QStringLiteral(":/icons/app_icon.svg"));
+        static QSvgRenderer appIcon(QStringLiteral(":/icons/app_icon.svg")); // parsed once
         int iconSize = std::min(width(), height()) / 4;
         iconSize = std::clamp(iconSize, 48, 120);
         QRect iconRect(width() / 2 - iconSize / 2, height() / 2 - iconSize / 2 - 12, iconSize, iconSize);

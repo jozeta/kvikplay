@@ -91,6 +91,10 @@ void SettingsManager::load() {
         m_dialogueBoost = obj[QStringLiteral("dialogueBoost")].toBool(false);
     }
 
+    if (obj.contains(QStringLiteral("externalOpen"))) {
+        m_externalOpenInNewWindow = obj[QStringLiteral("externalOpen")].toString() == QStringLiteral("newWindow");
+    }
+
     if (obj.contains(QStringLiteral("recentFiles")) && obj[QStringLiteral("recentFiles")].isArray()) {
         m_recentFiles.clear();
         for (const auto& v : obj[QStringLiteral("recentFiles")].toArray()) {
@@ -150,6 +154,7 @@ void SettingsManager::save() const {
     obj[QStringLiteral("startInFullscreen")] = m_startInFullscreen;
     obj[QStringLiteral("reverseTrackpadScrubbing")] = m_reverseTrackpadScrubbing;
     obj[QStringLiteral("dialogueBoost")] = m_dialogueBoost;
+    obj[QStringLiteral("externalOpen")] = m_externalOpenInNewWindow ? QStringLiteral("newWindow") : QStringLiteral("replace");
 
     QJsonArray recArr;
     for (const auto& f : m_recentFiles) recArr.append(f);
@@ -255,6 +260,12 @@ void SettingsManager::addRecentFile(const QString& filePath) {
         m_recentFiles.removeLast();
     }
     emit recentFilesChanged();
+}
+
+void SettingsManager::removeRecentFile(const QString& filePath) {
+    if (m_recentFiles.removeAll(filePath) > 0) {
+        emit recentFilesChanged();
+    }
 }
 
 void SettingsManager::clearRecentFiles() {

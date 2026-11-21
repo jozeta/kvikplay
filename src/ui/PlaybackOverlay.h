@@ -6,6 +6,7 @@
 #include <QSlider>
 #include <QGraphicsOpacityEffect>
 #include <QPropertyAnimation>
+#include <QTimer>
 #include "VolumeControl.h"
 #include "OsdNotification.h"
 #include "TimelinePreviewCard.h"
@@ -126,6 +127,10 @@ private:
     int m_lastReportedSec{-1};
     bool m_isPlaying{false};
     bool m_showRemainingTime{false};
+
+    // ⏩: a tap seeks +10 s, holding it plays at 2x until released.
+    QTimer* m_fwdHoldTimer{nullptr};
+    bool m_fwdBoosting{false};
 };
 
 } // namespace kvikplay

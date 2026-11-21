@@ -79,6 +79,8 @@ set(KVIKPLAY_SOURCES
     src/ui/FileAssociationDialog.cpp
     src/platform/PlatformIntegration.h
     src/platform/PlatformIntegration.cpp
+    src/platform/SingleInstance.h
+    src/platform/SingleInstance.cpp
     resources/resources.qrc
 )
 
@@ -112,7 +114,9 @@ qt_add_executable(kvikplay
     ${KVIKPLAY_SOURCES}
 )
 
-target_include_directories(kvikplay PRIVATE src)
+# One version number: project(VERSION) above -> version.h, Info.plist, app.rc
+configure_file(src/app/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h" @ONLY)
+target_include_directories(kvikplay PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 target_link_libraries(kvikplay PRIVATE
     Qt6::Core
@@ -143,6 +147,8 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME "Kvikplay"
         MACOSX_BUNDLE_ICON_FILE "kvikplay.icns"
         MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 
     add_executable(generate_icon packaging/macos/generate_icon.cpp)
@@ -300,6 +306,10 @@ if(APPLE)
     )
 endif()
 add_test(NAME test_platform COMMAND test_platform)
+
+add_test(NAME test_version_consistency
+    COMMAND ${CMAKE_COMMAND} -DVERSION=${PROJECT_VERSION} -DSRC=${CMAKE_CURRENT_SOURCE_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/CheckVersion.cmake)
 
 # Run every test from the source tree (so test_media/ is found from any build
 # folder) and point the settings at a throwaway folder instead of the user's.

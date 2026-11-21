@@ -5,8 +5,6 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTimer>
-#include <QGraphicsOpacityEffect>
-#include <QPropertyAnimation>
 
 namespace kvikplay {
 
@@ -41,8 +39,6 @@ private:
     QSlider* m_slider{nullptr};
     QLabel* m_percentLabel{nullptr};
 
-    QGraphicsOpacityEffect* m_sliderOpacity{nullptr};
-    QPropertyAnimation* m_sliderAnim{nullptr};
     QTimer* m_sliderHideTimer{nullptr};
 
     int m_volume{100};

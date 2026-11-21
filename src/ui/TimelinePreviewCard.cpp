@@ -13,6 +13,7 @@ TimelinePreviewCard::TimelinePreviewCard(QWidget* parent)
     , m_timeLabel(new QLabel(this)) {
 
     setAttribute(Qt::WA_TransparentForMouseEvents);
+    setAttribute(Qt::WA_StyledBackground, true); // paint the dark card behind the thumbnail
     setFixedSize(168, 120);
 
     setStyleSheet(QStringLiteral(

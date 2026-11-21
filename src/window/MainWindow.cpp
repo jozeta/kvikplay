@@ -16,16 +16,19 @@
 #include <QWindow>
 #include <QPainter>
 #include <QDateTime>
-#include <QCollator>
 #include <QDir>
 #include <QClipboard>
 #include <QFileDialog>
 #include <QStandardPaths>
+#include <QProcess>
 #include <algorithm>
+#include <utility>
 #include <cmath>
+#include "version.h"
 
 #ifdef _WIN32
 #include <windows.h>
+#include <windowsx.h> // GET_X_LPARAM / GET_Y_LPARAM
 #endif
 
 namespace kvikplay {
@@ -46,7 +49,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Frameless window setup with transparency for rounded corners
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
+#ifndef _WIN32
+    // macOS draws the rounded corners itself through a translucent window. Windows 11
+    // rounds frameless windows in DWM, and a translucent (layered) window there would
+    // push every video frame through a slow composition path, so it stays opaque.
     setAttribute(Qt::WA_TranslucentBackground, true);
+#endif
     setAttribute(Qt::WA_Hover, true);
     setMouseTracking(true);
     setAcceptDrops(true);
@@ -73,25 +81,20 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_overlay, &PlaybackOverlay::seekRequested, m_player.get(), &MediaPlayer::seekAbsolute);
     connect(m_overlay, &PlaybackOverlay::thumbnailRequested, this, &MainWindow::onThumbnailRequested);
     connect(m_overlay, &PlaybackOverlay::speedBoostRequested, this, [this](bool active) {
-        if (active) {
-            if (!m_speedBoostActive) {
-                m_speedBoostActive = true;
-                m_preBoostSpeed = m_player->speed();
-                m_player->setSpeed(2.0);
-                m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
-            }
-        } else {
-            if (m_speedBoostActive) {
-                m_speedBoostActive = false;
-                m_player->setSpeed(m_preBoostSpeed);
-                m_overlay->showOsd(QStringLiteral("Speed %1x").arg(m_preBoostSpeed, 0, 'f', 1));
-            }
-        }
+        active ? beginSpeedBoost() : endSpeedBoost();
     });
 
     if (m_thumbnailWorker) {
         connect(m_thumbnailWorker.get(), &ThumbnailWorker::thumbnailReady, this, &MainWindow::onThumbnailReady);
     }
+
+    // A file opened at launch (command line, Finder) waits for the video surface.
+    connect(m_renderer, &VideoRenderer::renderSetupFinished, this, [this](bool) {
+        if (!m_pendingOpen.isEmpty()) {
+            const QString file = std::exchange(m_pendingOpen, QString());
+            openFile(file);
+        }
+    }, Qt::QueuedConnection);
 
     // Player signal connections
     connect(m_player.get(), &MediaPlayer::stateChanged, this, &MainWindow::onPlaybackStateChanged);
@@ -108,6 +111,9 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_player.get(), &MediaPlayer::mediaEnded, this, &MainWindow::onMediaEnded);
     connect(m_player.get(), &MediaPlayer::errorOccurred, this, &MainWindow::onErrorOccurred);
     connect(m_player.get(), &MediaPlayer::screenshotTaken, this, &MainWindow::onScreenshotTaken);
+    connect(m_player.get(), &MediaPlayer::subtitleAdded, this, [this](const QString& name) {
+        m_overlay->showOsd(QStringLiteral("Subtitles: %1").arg(name));
+    });
     connect(m_player.get(), &MediaPlayer::chaptersChanged, this, &MainWindow::onChaptersChanged);
     connect(m_player.get(), &MediaPlayer::chapterChanged, this, &MainWindow::onChapterChanged);
 
@@ -130,6 +136,14 @@ MainWindow::MainWindow(QWidget* parent)
         m_overlay->showOsd(enabled ? QStringLiteral("Dialogue Boost: ON") : QStringLiteral("Dialogue Boost: OFF"));
     });
     connect(m_contextMenu, &ContextMenu::recentFileSelected, this, &MainWindow::openFile);
+    connect(m_contextMenu, &ContextMenu::externalOpenNewWindowToggled, this, [](bool newWindow) {
+        SettingsManager::instance().setExternalOpenInNewWindow(newWindow);
+        SettingsManager::instance().save();
+    });
+    connect(m_contextMenu, &ContextMenu::startInFullscreenToggled, this, [](bool on) {
+        SettingsManager::instance().setStartInFullscreen(on);
+        SettingsManager::instance().save();
+    });
     connect(m_contextMenu, &ContextMenu::clearRecentTriggered, this, [this]() {
         SettingsManager::instance().clearRecentFiles();
         SettingsManager::instance().save();
@@ -188,7 +202,7 @@ MainWindow::~MainWindow() {
     m_player.reset();
 }
 
-bool MainWindow::initialize() {
+bool MainWindow::initialize(bool cascade) {
     if (!m_player->initialize()) {
         return false;
     }
@@ -213,16 +227,18 @@ bool MainWindow::initialize() {
             initialCenter = QPoint(960, 540);
         }
     }
-    fitAndPositionWindow(savedSize, initialCenter);
-
-    if (settings.alwaysOnTop()) {
-        setAlwaysOnTop(true);
+    if (cascade) {
+        // An extra player window: offset it so it doesn't hide the first one.
+        initialCenter += QPoint(40, 40);
     }
+    fitAndPositionWindow(savedSize, initialCenter);
 
     m_overlay->setVolume(settings.volume());
     m_overlay->setMuted(settings.isMuted());
     m_contextMenu->setReverseTrackpad(settings.reverseTrackpadScrubbing());
     m_contextMenu->setRecentFiles(settings.recentFiles());
+    m_contextMenu->setExternalOpenNewWindow(settings.externalOpenInNewWindow());
+    m_contextMenu->setStartInFullscreen(settings.startInFullscreen());
 
     bool dBoost = settings.dialogueBoost();
     m_player->setDialogueBoost(dBoost);
@@ -238,6 +254,11 @@ bool MainWindow::initialize() {
             if (activatedByMouse) {
                 m_activatedByMouseClick = true;
             }
+        });
+        m_platform->installHoverObserver(this, [this]() {
+            // Hover while the app is in the background: same as a mouse move.
+            m_overlay->showOverlay();
+            m_osdTimer->start(5000);
         });
 
         MediaKeyCallbacks callbacks;
@@ -274,7 +295,18 @@ bool MainWindow::initialize() {
         m_platform->setupMediaKeyCommands(callbacks);
     }
 
+    // After the native window is set up, so the platform can apply it directly.
+    if (settings.alwaysOnTop()) {
+        setAlwaysOnTop(true);
+    }
+
     return true;
+}
+
+void MainWindow::applyStartupState() {
+    if (SettingsManager::instance().startInFullscreen() && !m_isFullscreen) {
+        toggleFullscreen();
+    }
 }
 
 void MainWindow::openFileDialog() {
@@ -295,6 +327,26 @@ void MainWindow::openFileDialog() {
 }
 
 void MainWindow::openFile(const QString& filePath) {
+    const QFileInfo fi(filePath);
+    if (!fi.isFile()) {
+        // A recent file that was moved or deleted: drop it from the list.
+        SettingsManager::instance().removeRecentFile(filePath);
+        SettingsManager::instance().save();
+        m_contextMenu->setRecentFiles(SettingsManager::instance().recentFiles());
+        m_overlay->showOsd(QStringLiteral("File not found: %1").arg(fi.fileName()));
+        return;
+    }
+    if (!FormatRegistry::instance().isSupported(filePath)) {
+        m_overlay->showOsd(QStringLiteral("%1 is not a supported media file").arg(fi.fileName()));
+        return;
+    }
+    if (!m_renderer->isRenderSetupDone()) {
+        // Loading now would race the OpenGL setup and mpv would pick its "null"
+        // video output (black window). Open it as soon as the surface is ready.
+        m_pendingOpen = fi.absoluteFilePath();
+        return;
+    }
+
     if (!m_currentFilePath.isEmpty() && m_player->hasMedia()) {
         double curPos = m_player->position();
         double dur = m_player->duration();
@@ -303,17 +355,51 @@ void MainWindow::openFile(const QString& filePath) {
         }
     }
 
-    m_currentFilePath = filePath;
-    SettingsManager::instance().addRecentFile(filePath);
+    m_currentFilePath = fi.absoluteFilePath();
+    SettingsManager::instance().addRecentFile(m_currentFilePath);
     SettingsManager::instance().save();
     m_contextMenu->setRecentFiles(SettingsManager::instance().recentFiles());
 
     if (m_thumbnailWorker) {
-        m_thumbnailWorker->openFile(filePath);
+        m_thumbnailWorker->openFile(m_currentFilePath);
     }
 
-    m_player->openMedia(filePath);
-    m_player->play(); // Auto-play straight away
+    m_player->openMedia(m_currentFilePath); // starts playing as soon as it loads
+    m_folderIndex.prefetch(fi.absolutePath()); // next/previous without blocking later
+}
+
+void MainWindow::openExternalFile(const QString& filePath) {
+    if (SettingsManager::instance().externalOpenInNewWindow() && m_player->hasMedia()) {
+        launchNewWindow(filePath);
+        return;
+    }
+    openFile(filePath);
+}
+
+void MainWindow::openForwardedFile(const QString& filePath) {
+    openFile(filePath);
+    if (isMinimized()) {
+        showNormal();
+    }
+    raise();
+    activateWindow();
+}
+
+void MainWindow::launchNewWindow(const QString& filePath) {
+    // A separate player process: its own playback, volume and system media controls.
+#ifdef Q_OS_MACOS
+    // Inside an .app bundle, ask LaunchServices for a new instance (-n).
+    QDir bundle(QCoreApplication::applicationDirPath());
+    bundle.cdUp();
+    bundle.cdUp();
+    if (bundle.absolutePath().endsWith(QStringLiteral(".app"))) {
+        QProcess::startDetached(QStringLiteral("/usr/bin/open"),
+                                {QStringLiteral("-n"), bundle.absolutePath(), QStringLiteral("--args"),
+                                 QStringLiteral("--cascade"), filePath});
+        return;
+    }
+#endif
+    QProcess::startDetached(QCoreApplication::applicationFilePath(), {QStringLiteral("--cascade"), filePath});
 }
 
 void MainWindow::onVideoParamsChanged(int width, int height, int displayWidth, int displayHeight, double dar) {
@@ -344,8 +430,7 @@ void MainWindow::onMediaLoaded(const MediaInfo& info) {
     m_renderer->setMediaInfo(info);
     m_overlay->setFileName(info.fileName);
     m_overlay->setDuration(info.duration);
-    m_contextMenu->setTracks(info.audioTracks, info.videoTracks, info.subtitleTracks);
-    m_player->play(); // Ensure immediate playback on open
+    // Track menus are filled by tracksChanged, which mpv sends just before this.
 
     double resumePos = SettingsManager::instance().resumePosition(info.filePath);
     if (resumePos > 5.0 && (info.duration <= 0.0 || resumePos < info.duration - 5.0)) {
@@ -435,7 +520,7 @@ void MainWindow::onScreenshotTaken(const QString& filePath) {
 }
 
 void MainWindow::onThumbnailRequested(double seconds) {
-    if (m_thumbnailWorker) {
+    if (m_thumbnailWorker && m_player->mediaInfo().hasVideo()) {
         m_thumbnailWorker->requestThumbnail(seconds);
     }
 }
@@ -453,51 +538,46 @@ void MainWindow::toggleDialogueBoost() {
     m_overlay->showOsd(next ? QStringLiteral("Dialogue Boost: ON") : QStringLiteral("Dialogue Boost: OFF"));
 }
 
-QStringList MainWindow::getFolderMediaFiles() const {
-    if (m_currentFilePath.isEmpty()) return {};
-    QFileInfo curFi(m_currentFilePath);
-    QDir dir = curFi.dir();
-    QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Readable, QDir::NoSort);
-
-    QStringList mediaFiles;
-    for (const auto& entry : entries) {
-        if (FormatRegistry::instance().isSupported(entry.fileName())) {
-            mediaFiles.push_back(entry.absoluteFilePath());
-        }
-    }
-
-    QCollator collator;
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
-    std::sort(mediaFiles.begin(), mediaFiles.end(), [&collator](const QString& a, const QString& b) {
-        return collator.compare(a, b) < 0;
-    });
-
-    return mediaFiles;
-}
-
 void MainWindow::playNextInFolder() {
-    QStringList files = getFolderMediaFiles();
-    if (files.size() <= 1) return;
-
-    int idx = files.indexOf(m_currentFilePath);
-    if (idx >= 0 && idx + 1 < files.size()) {
-        QString nextFile = files[idx + 1];
+    if (m_currentFilePath.isEmpty()) return;
+    const QString nextFile = m_folderIndex.next(m_currentFilePath);
+    if (!nextFile.isEmpty()) {
         openFile(nextFile);
         m_overlay->showOsd(QStringLiteral("Next: %1").arg(QFileInfo(nextFile).fileName()));
     }
 }
 
 void MainWindow::playPreviousInFolder() {
-    QStringList files = getFolderMediaFiles();
-    if (files.size() <= 1) return;
-
-    int idx = files.indexOf(m_currentFilePath);
-    if (idx > 0) {
-        QString prevFile = files[idx - 1];
+    if (m_currentFilePath.isEmpty()) return;
+    const QString prevFile = m_folderIndex.previous(m_currentFilePath);
+    if (!prevFile.isEmpty()) {
         openFile(prevFile);
-        m_overlay->showOsd(QStringLiteral("Prev: %1").arg(QFileInfo(prevFile).fileName()));
+        m_overlay->showOsd(QStringLiteral("Previous: %1").arg(QFileInfo(prevFile).fileName()));
     }
+}
+
+void MainWindow::beginSpeedBoost() {
+    if (m_speedBoostActive) return;
+    m_speedBoostActive = true;
+    m_preBoostSpeed = m_player->speed();
+    m_player->setSpeed(2.0);
+    m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
+}
+
+void MainWindow::endSpeedBoost() {
+    if (!m_speedBoostActive) return;
+    m_speedBoostActive = false;
+    m_player->setSpeed(m_preBoostSpeed);
+    m_overlay->showOsd(QStringLiteral("Speed %1x").arg(m_preBoostSpeed, 0, 'f', 1));
+}
+
+void MainWindow::setSpeedAndRemember(double speed) {
+    // A deliberate speed change (not the temporary 2x boost) is kept for next time.
+    if (m_speedBoostActive) {
+        m_speedBoostActive = false; // the new speed replaces the boost
+    }
+    m_player->setSpeed(speed);
+    SettingsManager::instance().setPlaybackSpeed(speed);
 }
 
 void MainWindow::onChaptersChanged(const std::vector<ChapterInfo>& chapters) {
@@ -545,7 +625,7 @@ void MainWindow::toggleMediaInspector() {
     if (!m_inspector) return;
     m_inspector->toggleInspector();
     if (m_inspector->isVisible()) {
-        m_inspector->move(20, 50);
+        m_inspector->move(20, 60); // below the file-name tag
         m_inspector->updateStats(m_player->streamStats());
         m_inspectorTimer->start();
     } else {
@@ -563,14 +643,13 @@ void MainWindow::setAlwaysOnTop(bool top) {
     m_contextMenu->setAlwaysOnTop(top);
     SettingsManager::instance().setAlwaysOnTop(top);
 
-    Qt::WindowFlags flags = windowFlags();
-    if (top) {
-        flags |= Qt::WindowStaysOnTopHint;
-    } else {
-        flags &= ~Qt::WindowStaysOnTopHint;
+    // Changed on the existing native window: QWidget::setWindowFlags() would destroy
+    // and recreate it, losing the rounded corners, aspect lock and focus tracking.
+    if (m_platform) {
+        m_platform->setAlwaysOnTop(this, top);
+    } else if (windowHandle()) {
+        windowHandle()->setFlag(Qt::WindowStaysOnTopHint, top);
     }
-    setWindowFlags(flags);
-    show();
 }
 
 void MainWindow::toggleFullscreen() {
@@ -623,12 +702,12 @@ void MainWindow::applyWindowScale(double scale) {
 }
 
 void MainWindow::fitAndPositionWindow(const QSize& targetSize, const QPoint& preferredCenter) {
-    QScreen* scr = screen();
+    // The screen under the preferred centre first: before the window is shown,
+    // screen() is always the primary one, which pulled a window saved on a second
+    // monitor back onto the main screen.
+    QScreen* scr = QGuiApplication::screenAt(preferredCenter);
     if (!scr) {
-        scr = QGuiApplication::screenAt(preferredCenter);
-    }
-    if (!scr) {
-        scr = QGuiApplication::screenAt(geometry().center());
+        scr = screen();
     }
     if (!scr) {
         scr = QGuiApplication::primaryScreen();
@@ -754,6 +833,9 @@ void MainWindow::changeEvent(QEvent* event) {
             if (QApplication::mouseButtons() != Qt::NoButton) {
                 m_activatedByMouseClick = true;
             }
+        } else {
+            // C held while switching apps: its key release goes elsewhere.
+            endSpeedBoost();
         }
     }
     QWidget::changeEvent(event);
@@ -872,7 +954,9 @@ void MainWindow::mouseMoveEvent(QMouseEvent* event) {
     // Show overlay immediately on mouse movement
     m_overlay->showOverlay();
     m_overlay->raise();
-    setCursor(Qt::ArrowCursor);
+    if (m_isFullscreen) {
+        setCursor(Qt::ArrowCursor); // un-hide after the inactivity timeout
+    }
 
     // Reset 5s inactivity timer
     m_osdTimer->start(5000);
@@ -1047,29 +1131,15 @@ void MainWindow::dropEvent(QDropEvent* event) {
                 QString localPath = url.toLocalFile();
                 QFileInfo fi(localPath);
                 if (fi.isDir()) {
-                    // Find first media file in directory using natural sorting
-                    QDir dir(localPath);
-                    QFileInfoList entries = dir.entryInfoList(QDir::Files | QDir::Readable, QDir::NoSort);
-                    QStringList mediaFiles;
-                    for (const auto& entry : entries) {
-                        if (FormatRegistry::instance().isSupported(entry.fileName())) {
-                            mediaFiles.push_back(entry.absoluteFilePath());
-                        }
-                    }
+                    // First media file of the folder, in natural order
+                    const QStringList mediaFiles = m_folderIndex.files(localPath);
                     if (!mediaFiles.isEmpty()) {
-                        QCollator collator;
-                        collator.setNumericMode(true);
-                        collator.setCaseSensitivity(Qt::CaseInsensitive);
-                        std::sort(mediaFiles.begin(), mediaFiles.end(), [&collator](const QString& a, const QString& b) {
-                            return collator.compare(a, b) < 0;
-                        });
                         openFile(mediaFiles.first());
                         event->acceptProposedAction();
                         return;
                     }
                 } else if (isSubtitleFile(localPath)) {
-                    m_player->addSubtitleTrack(localPath);
-                    m_overlay->showOsd(QStringLiteral("Subtitles: %1").arg(fi.fileName()));
+                    m_player->addSubtitleTrack(localPath); // OSD once mpv has loaded it
                     event->acceptProposedAction();
                     return;
                 } else if (FormatRegistry::instance().isSupported(localPath)) {
@@ -1100,11 +1170,8 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
         applyWindowScale(0.25);
         break;
     case Qt::Key_C:
-        if (!event->isAutoRepeat() && !m_speedBoostActive) {
-            m_speedBoostActive = true;
-            m_preBoostSpeed = m_player->speed();
-            m_player->setSpeed(2.0);
-            m_overlay->showOsd(QStringLiteral("Speed 2.0x"));
+        if (!event->isAutoRepeat()) {
+            beginSpeedBoost();
         }
         break;
     case Qt::Key_Z:
@@ -1158,7 +1225,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Minus: {
         double curSpd = m_player->speed();
         double newSpd = std::clamp(std::round((curSpd - 0.1) * 10.0) / 10.0, 0.25, 4.0);
-        m_player->setSpeed(newSpd);
+        setSpeedAndRemember(newSpd);
         m_overlay->showOsd(QStringLiteral("Speed %1x").arg(newSpd, 0, 'f', 1));
         break;
     }
@@ -1166,12 +1233,12 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     case Qt::Key_Plus: {
         double curSpd = m_player->speed();
         double newSpd = std::clamp(std::round((curSpd + 0.1) * 10.0) / 10.0, 0.25, 4.0);
-        m_player->setSpeed(newSpd);
+        setSpeedAndRemember(newSpd);
         m_overlay->showOsd(QStringLiteral("Speed %1x").arg(newSpd, 0, 'f', 1));
         break;
     }
     case Qt::Key_Backspace:
-        m_player->setSpeed(1.0);
+        setSpeedAndRemember(1.0);
         m_overlay->showOsd(QStringLiteral("Speed 1.0x"));
         break;
     case Qt::Key_Space:
@@ -1237,11 +1304,7 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
 
 void MainWindow::keyReleaseEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_C && !event->isAutoRepeat()) {
-        if (m_speedBoostActive) {
-            m_speedBoostActive = false;
-            m_player->setSpeed(m_preBoostSpeed);
-            m_overlay->showOsd(QStringLiteral("Speed %1x").arg(m_preBoostSpeed, 0, 'f', 1));
-        }
+        endSpeedBoost();
         return;
     }
     QWidget::keyReleaseEvent(event);
@@ -1260,10 +1323,11 @@ void MainWindow::showAboutDialog() {
         "QLabel { color: #dddddd; font-size: 13px; }"
         "QPushButton { background-color: #272b35; color: #ffffff; border: 1px solid #3d4352; border-radius: 6px; padding: 6px 16px; }"
     ));
+    aboutBox.setTextFormat(Qt::RichText); // static text only, no media data
     aboutBox.setText(QStringLiteral(
         "<h3>Kvikplay</h3>"
-        "<p>Fast, minimalistic cross-platform media player.</p>"
-        "<p>Built with Nordic minimalism: zero chrome, instant playback, precise aspect-ratio locking.</p>"
+        "<p>Version " KVIKPLAY_VERSION "</p>"
+        "<p>Fast, minimalistic media player for macOS and Windows.</p>"
         "<p>Engine: <b>libmpv</b> &bull; UI: <b>Qt 6</b></p>"
     ));
     aboutBox.setIconPixmap(QIcon(QStringLiteral(":/icons/app_icon.svg")).pixmap(48, 48));
@@ -1274,23 +1338,48 @@ void MainWindow::showAboutDialog() {
 bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr* result) {
     MSG* msg = static_cast<MSG*>(message);
 
-    if (msg->message == WM_MOUSEACTIVATE) {
+    switch (msg->message) {
+    case WM_MOUSEACTIVATE:
+        // The click that focuses the window must not also play/pause.
         m_activatedByMouseClick = true;
         m_lastActivationTime = QDateTime::currentMSecsSinceEpoch();
         *result = MA_ACTIVATEANDEAT;
         return true;
-    }
 
-    if (msg->message == WM_NCHITTEST && !m_isFullscreen) {
+    case WM_NCCALCSIZE:
+        // WS_THICKFRAME (added for resize, snap and the DWM shadow) brings back a
+        // non-client frame; without this a white strip shows on Windows 10.
+        if (msg->wParam == TRUE) {
+            if (IsZoomed(msg->hwnd)) {
+                // Maximized windows extend past the screen by the frame width; trim it.
+                auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(msg->lParam);
+                const UINT dpi = GetDpiForWindow(msg->hwnd);
+                const int frame = GetSystemMetricsForDpi(SM_CXFRAME, dpi) + GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+                params->rgrc[0].left += frame;
+                params->rgrc[0].top += frame;
+                params->rgrc[0].right -= frame;
+                params->rgrc[0].bottom -= frame;
+            }
+            *result = 0;
+            return true;
+        }
+        break;
+
+    case WM_NCHITTEST: {
+        if (m_isFullscreen) break;
         POINT pt = {GET_X_LPARAM(msg->lParam), GET_Y_LPARAM(msg->lParam)};
-        ScreenToClient(reinterpret_cast<HWND>(winId()), &pt);
+        ScreenToClient(msg->hwnd, &pt);
 
-        int x = pt.x;
-        int y = pt.y;
-        int w = width();
-        int h = height();
-        int m = m_borderMargin;   // 16px
-        int c = m_cornerMargin;   // 32px
+        // Windows gives physical pixels; width()/height() and the margins are logical
+        // (Qt) pixels. Convert, or at 150 % scaling a third of the window would act
+        // as a resize border.
+        const qreal dpr = devicePixelRatioF();
+        const int x = static_cast<int>(pt.x / dpr);
+        const int y = static_cast<int>(pt.y / dpr);
+        const int w = width();
+        const int h = height();
+        const int m = m_borderMargin;   // 16px
+        const int c = m_cornerMargin;   // 32px
 
         if (x <= c && y <= c) { *result = HTTOPLEFT; return true; }
         if (x >= w - c && y <= c) { *result = HTTOPRIGHT; return true; }
@@ -1300,40 +1389,47 @@ bool MainWindow::nativeEvent(const QByteArray& eventType, void* message, qintptr
         if (x >= w - m) { *result = HTRIGHT; return true; }
         if (y <= m) { *result = HTTOP; return true; }
         if (y >= h - m) { *result = HTBOTTOM; return true; }
-    } else if (msg->message == WM_SIZING && !m_isFullscreen) {
-        RECT* rect = reinterpret_cast<RECT*>(msg->lParam);
-        double ratio = m_aspectManager.aspectRatio();
+        break;
+    }
 
-        int w = rect->right - rect->left;
-        int h = rect->bottom - rect->top;
+    case WM_SIZING: {
+        if (m_isFullscreen) break;
+        RECT* rect = reinterpret_cast<RECT*>(msg->lParam);
+        const double ratio = m_aspectManager.aspectRatio();
+        const qreal dpr = devicePixelRatioF();
+        const int minW = static_cast<int>(std::round(m_aspectManager.minimumSize().width() * dpr));
+
+        // The rect is in physical pixels; keep the aspect ratio and the minimum size.
+        int w = std::max(static_cast<int>(rect->right - rect->left), minW);
+        int h = static_cast<int>(std::round(w / ratio));
 
         switch (msg->wParam) {
-        case WMSZ_LEFT:
-        case WMSZ_RIGHT:
-            h = static_cast<int>(std::round(w / ratio));
-            rect->bottom = rect->top + h;
-            break;
         case WMSZ_TOP:
-        case WMSZ_BOTTOM:
+        case WMSZ_BOTTOM: {
+            h = std::max(static_cast<int>(rect->bottom - rect->top),
+                         static_cast<int>(std::round(minW / ratio)));
             w = static_cast<int>(std::round(h * ratio));
+            if (msg->wParam == WMSZ_TOP) rect->top = rect->bottom - h; else rect->bottom = rect->top + h;
             rect->right = rect->left + w;
             break;
+        }
+        case WMSZ_LEFT:
         case WMSZ_TOPLEFT:
-        case WMSZ_BOTTOMRIGHT:
-        case WMSZ_TOPRIGHT:
         case WMSZ_BOTTOMLEFT:
-            h = static_cast<int>(std::round(w / ratio));
-            if (msg->wParam == WMSZ_TOPLEFT || msg->wParam == WMSZ_TOPRIGHT) {
-                rect->top = rect->bottom - h;
-            } else {
-                rect->bottom = rect->top + h;
-            }
+            rect->left = rect->right - w;
+            if (msg->wParam == WMSZ_TOPLEFT) rect->top = rect->bottom - h; else rect->bottom = rect->top + h;
             break;
-        default:
+        default: // WMSZ_RIGHT, WMSZ_TOPRIGHT, WMSZ_BOTTOMRIGHT
+            rect->right = rect->left + w;
+            if (msg->wParam == WMSZ_TOPRIGHT) rect->top = rect->bottom - h; else rect->bottom = rect->top + h;
             break;
         }
         *result = TRUE;
         return true;
+    }
+
+    default:
+        break;
     }
 
     return QWidget::nativeEvent(eventType, message, result);

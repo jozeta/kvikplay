@@ -5,8 +5,8 @@
 #include <memory>
 #include <functional>
 
-class QWindow;
-class QWidget;
+#include <QWidget>
+#include <QWindow>
 
 namespace kvikplay {
 
@@ -42,6 +42,28 @@ public:
     virtual void installActivationObserver(QWidget* widget, std::function<void(bool activatedByMouse)> callback) {
         (void)widget;
         (void)callback;
+    }
+
+    // Keep the window above others without recreating the native window (a QWidget
+    // setWindowFlags() call would drop the native customisations above).
+    virtual void setAlwaysOnTop(QWidget* widget, bool top) {
+        if (widget && widget->windowHandle()) {
+            widget->windowHandle()->setFlag(Qt::WindowStaysOnTopHint, top);
+        }
+    }
+
+    // Mouse movement over the window while the app is in the background, so the
+    // controls appear on hover without a click first. Windows already delivers it.
+    virtual void installHoverObserver(QWidget* widget, std::function<void()> onHover) {
+        (void)widget;
+        (void)onHover;
+    }
+
+    // Undo registerFileAssociations() for these extensions, where the OS allows it.
+    virtual bool canUnregisterFileAssociations() const { return false; }
+    virtual bool unregisterFileAssociations(const QStringList& extensions) {
+        (void)extensions;
+        return false;
     }
 
     // Power & Sleep management

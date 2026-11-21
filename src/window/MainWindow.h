@@ -5,6 +5,7 @@
 #include <QPoint>
 #include <QTimer>
 #include "player/MediaPlayer.h"
+#include "player/FolderIndex.h"
 #include "player/ThumbnailWorker.h"
 #include "rendering/VideoRenderer.h"
 #include "window/AspectRatioManager.h"
@@ -21,8 +22,17 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
-    bool initialize();
+    bool initialize(bool cascade = false);
+    // Called once after show(): applies "Start in Fullscreen".
+    void applyStartupState();
+
+    // Open in this window (drag-and-drop, Open File, recent files, next/previous).
     void openFile(const QString& filePath);
+    // Opened from Finder/Explorer: replaces the video or opens a new window,
+    // depending on the "Opening from Finder/Explorer" menu choice.
+    void openExternalFile(const QString& filePath);
+    // A file handed over by a second launch (Windows single instance).
+    void openForwardedFile(const QString& filePath);
 
 protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -90,7 +100,10 @@ private:
     void updateCursorForEdges(Qt::Edges edges);
     void updateRendererGeometry();
     void fitAndPositionWindow(const QSize& targetSize, const QPoint& preferredCenter);
-    QStringList getFolderMediaFiles() const;
+    void launchNewWindow(const QString& filePath);
+    void beginSpeedBoost();
+    void endSpeedBoost();
+    void setSpeedAndRemember(double speed);
     void updateNowPlayingMetadata();
     void openFileDialog();
 
@@ -98,8 +111,10 @@ private:
     std::unique_ptr<PlatformIntegration> m_platform;
     std::unique_ptr<ThumbnailWorker> m_thumbnailWorker;
     AspectRatioManager m_aspectManager;
+    FolderIndex m_folderIndex;
 
     QString m_currentFilePath;
+    QString m_pendingOpen; // opened once the video surface is ready
 
     VideoRenderer* m_renderer{nullptr};
     PlaybackOverlay* m_overlay{nullptr};

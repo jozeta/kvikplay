@@ -1,0 +1,22 @@
+# HYG-VERSION-1/2: one version number, from project(VERSION) in CMakeLists.txt.
+# Run with: cmake -DVERSION=<x.y.z> -DSRC=<source dir> -P CheckVersion.cmake
+file(READ "${SRC}/README.md" readme)
+file(READ "${SRC}/CHANGELOG.md" changelog)
+file(READ "${SRC}/packaging/macos/Info.plist.in" plist)
+file(READ "${SRC}/packaging/windows/app.rc.in" rc)
+
+string(FIND "${readme}" "**Version ${VERSION}**" r)
+if(r EQUAL -1)
+    message(FATAL_ERROR "README.md does not show **Version ${VERSION}**")
+endif()
+string(FIND "${changelog}" "## ${VERSION}" c)
+if(c EQUAL -1)
+    message(FATAL_ERROR "CHANGELOG.md has no '## ${VERSION}' section")
+endif()
+if(plist MATCHES "<string>[0-9]+\\.[0-9]+\\.[0-9]+</string>")
+    message(FATAL_ERROR "Info.plist.in hard-codes a version; use the bundle version variables")
+endif()
+if(rc MATCHES "[0-9]+,[0-9]+,[0-9]+,[0-9]+" OR rc MATCHES "\"[0-9]+\\.[0-9]+\\.[0-9]+")
+    message(FATAL_ERROR "app.rc.in hard-codes a version; use @PROJECT_VERSION_*@")
+endif()
+message(STATUS "Version ${VERSION} is consistent")

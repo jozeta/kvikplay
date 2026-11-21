@@ -88,10 +88,30 @@ ContextMenu::ContextMenu(QWidget* parent)
     m_reverseTrackpadAction->setCheckable(true);
     connect(m_reverseTrackpadAction, &QAction::toggled, this, &ContextMenu::reverseTrackpadToggled);
 
+    m_startFullscreenAction = addAction(QStringLiteral("Start in Fullscreen"));
+    m_startFullscreenAction->setCheckable(true);
+    connect(m_startFullscreenAction, &QAction::toggled, this, &ContextMenu::startInFullscreenToggled);
+
+#ifdef Q_OS_MACOS
+    auto* externalMenu = addMenu(QStringLiteral("Opening Files from Finder"));
+#else
+    auto* externalMenu = addMenu(QStringLiteral("Opening Files from Explorer"));
+#endif
+    auto* externalGroup = new QActionGroup(externalMenu);
+    m_externalReplaceAction = externalMenu->addAction(QStringLiteral("Replace Current Video"));
+    m_externalNewWindowAction = externalMenu->addAction(QStringLiteral("Open in New Window"));
+    for (QAction* a : {m_externalReplaceAction, m_externalNewWindowAction}) {
+        a->setCheckable(true);
+        externalGroup->addAction(a);
+    }
+    m_externalReplaceAction->setChecked(true);
+    connect(m_externalNewWindowAction, &QAction::toggled, this, &ContextMenu::externalOpenNewWindowToggled);
+
     addSeparator();
 
     m_fileAssocAction = addAction(QStringLiteral("File Associations..."), this, &ContextMenu::fileAssociationsTriggered);
-    m_helpAction = addAction(QStringLiteral("Help & Shortcuts..."), this, &ContextMenu::helpTriggered);
+    // "&&": a single & would be eaten as a keyboard-accelerator marker.
+    m_helpAction = addAction(QStringLiteral("Help && Shortcuts..."), this, &ContextMenu::helpTriggered);
     m_aboutAction = addAction(QStringLiteral("About"), this, &ContextMenu::aboutTriggered);
 
     addSeparator();
@@ -120,6 +140,16 @@ void ContextMenu::setDialogueBoost(bool enabled) {
     if (m_dialogueBoostAction) {
         m_dialogueBoostAction->setChecked(enabled);
     }
+}
+
+void ContextMenu::setExternalOpenNewWindow(bool newWindow) {
+    QSignalBlocker block(m_externalNewWindowAction); // reflect the setting, don't re-emit
+    (newWindow ? m_externalNewWindowAction : m_externalReplaceAction)->setChecked(true);
+}
+
+void ContextMenu::setStartInFullscreen(bool on) {
+    QSignalBlocker block(m_startFullscreenAction);
+    m_startFullscreenAction->setChecked(on);
 }
 
 void ContextMenu::setRecentFiles(const QStringList& files) {
@@ -157,7 +187,8 @@ void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,
         m_audioMenu->setEnabled(false);
     } else {
         m_audioMenu->setEnabled(true);
-        auto* group = new QActionGroup(m_audioMenu);
+        if (!m_audioGroup) m_audioGroup = new QActionGroup(this);
+        auto* group = m_audioGroup;
         for (const auto& t : audio) {
             auto* act = m_audioMenu->addAction(t.displayName());
             act->setCheckable(true);
@@ -176,7 +207,8 @@ void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,
         m_videoMenu->setEnabled(false);
     } else {
         m_videoMenu->setEnabled(true);
-        auto* group = new QActionGroup(m_videoMenu);
+        if (!m_videoGroup) m_videoGroup = new QActionGroup(this);
+        auto* group = m_videoGroup;
         for (const auto& t : video) {
             auto* act = m_videoMenu->addAction(t.displayName());
             act->setCheckable(true);
@@ -195,7 +227,8 @@ void ContextMenu::setTracks(const std::vector<TrackInfo>& audio,
         m_subtitleMenu->setEnabled(false);
     } else {
         m_subtitleMenu->setEnabled(true);
-        auto* group = new QActionGroup(m_subtitleMenu);
+        if (!m_subtitleGroup) m_subtitleGroup = new QActionGroup(this);
+        auto* group = m_subtitleGroup;
 
         // Disabled option
         bool anySelected = false;
