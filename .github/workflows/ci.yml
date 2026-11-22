@@ -57,11 +57,6 @@ jobs:
             mingw-w64-ucrt-x86_64-mpv
             mingw-w64-ucrt-x86_64-cppwinrt
             zip
-      - name: mpv capabilities (diagnostics)
-        run: |
-          mpv --version | head -3 || true
-          mpv --gpu-context=help || true
-          mpv --gpu-api=help || true
       - name: Configure
         # The native (relocating) pkgconf: MSYS's own pkg-config returns /ucrt64/... paths
         # that a native CMake can't resolve.
