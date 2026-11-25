@@ -2,7 +2,7 @@
 
 > A fast, lightweight, frameless video and audio player for macOS and Windows.
 
-**Version 1.2.2** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
+**Version 1.3.0** · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Download](https://github.com/jozeta/kvikplay/releases/latest)
 
 Kvikplay is for people who want a video to open instantly and then get out of the way. There is no
 title bar, toolbar or playlist: the video fills a rounded, borderless window that keeps the video's
@@ -47,6 +47,14 @@ decoding and HDR tone mapping. The interface is Qt 6.
 ---
 
 ## What's new
+
+### 1.3.0 (2026-11-25)
+
+- **Windows: video now shows.** Every earlier Windows build played sound over a black window;
+  the picture now appears (confirmed on a Windows 11 PC).
+- **Diagnostics log:** a small local `kvikplay.log` (never sent anywhere) helps track down
+  playback problems; see Troubleshooting.
+- The media inspector (`I`) shows the video output and the OpenGL renderer.
 
 ### 1.2.2 (2026-11-21)
 

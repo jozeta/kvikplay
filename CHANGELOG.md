@@ -4,6 +4,8 @@ All notable changes to Kvikplay. Newest first. Versions follow [semantic version
 
 ## Unreleased
 
+## 1.3.0 — 2026-11-25
+
 ### Fixed
 - **Windows: black picture with sound.** Kvikplay asked mpv for the video output list
   `libmpv,null`; mpv probes list entries, and outside macOS its `libmpv` output refuses to be
